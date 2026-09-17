@@ -106,6 +106,9 @@ func (n *node) info() Info {
 	if n.isDir() {
 		size = 4096
 	}
+	if n.mode&fs.ModeDevice != 0 {
+		size = 0
+	}
 	return Info{
 		Name:        n.name,
 		Mode:        n.mode,
@@ -301,6 +304,9 @@ func (f *FS) WriteFile(p string, data []byte, opts WriteOptions) error {
 	if err != nil {
 		return err
 	}
+	if n.mode&fs.ModeDevice != 0 {
+		return nil // writes to /dev/null and friends vanish
+	}
 	n.content = append([]byte(nil), data...)
 	n.size = int64(len(data))
 	n.placeholder = false
@@ -316,6 +322,9 @@ func (f *FS) AppendFile(p string, data []byte, opts WriteOptions) error {
 	n, err := f.create(p, opts)
 	if err != nil {
 		return err
+	}
+	if n.mode&fs.ModeDevice != 0 {
+		return nil
 	}
 	if n.placeholder || n.dynamic != nil {
 		// Appending to something we never authored: the best we can do
@@ -635,3 +644,25 @@ func walkNode(p string, n *node, fn func(string, Info) error) error {
 	}
 	return nil
 }
+
+// Mknod creates a device node. typ must be fs.ModeDevice (block) or
+// fs.ModeDevice|fs.ModeCharDevice (character). Reads return content, or
+// the dynamic generator when set; writes are accepted and discarded.
+func (f *FS) Mknod(p string, typ fs.FileMode, gen Dynamic, opts WriteOptions) error {
+	if typ&fs.ModeDevice == 0 {
+		return ErrInvalid
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n, err := f.create(p, opts)
+	if err != nil {
+		return err
+	}
+	n.mode = (typ & fs.ModeType) | (n.mode & fs.ModePerm)
+	n.dynamic = gen
+	n.size = 0
+	return nil
+}
+
+// IsDevice reports whether the node is a block or character device.
+func (i Info) IsDevice() bool { return i.Mode&fs.ModeDevice != 0 }

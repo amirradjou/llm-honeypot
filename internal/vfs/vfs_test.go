@@ -295,3 +295,35 @@ func TestWalkAndStrerror(t *testing.T) {
 		t.Fatalf("Strerror(nil) = %q", s)
 	}
 }
+
+func TestDeviceNodes(t *testing.T) {
+	f := newTestFS(t)
+	_ = f.Mkdir("/dev", WriteOptions{})
+	if err := f.Mknod("/dev/null", fs.ModeDevice|fs.ModeCharDevice, nil, WriteOptions{Mode: 0o666}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Mknod("/dev/sda", fs.ModeDevice, nil, WriteOptions{Mode: 0o660}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Mknod("/dev/bad", 0, nil, WriteOptions{}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("Mknod without device type: %v", err)
+	}
+	info, _ := f.Stat("/dev/null")
+	if !info.IsDevice() || info.Mode&fs.ModeCharDevice == 0 || info.Mode.Perm() != 0o666 || info.Size != 0 {
+		t.Fatalf("/dev/null = %+v", info)
+	}
+	if err := f.WriteFile("/dev/null", []byte("gone"), WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.AppendFile("/dev/null", []byte("gone"), WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	data, info, err := f.ReadFile("/dev/null")
+	if err != nil || len(data) != 0 || !info.IsDevice() {
+		t.Fatalf("/dev/null after write = %q %+v %v", data, info, err)
+	}
+	sda, _ := f.Stat("/dev/sda")
+	if sda.Mode&fs.ModeCharDevice != 0 || !sda.IsDevice() {
+		t.Fatalf("/dev/sda = %+v", sda)
+	}
+}
