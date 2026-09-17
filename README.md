@@ -77,4 +77,11 @@ GeoIP/ASN lookup, model access behind one interface.
 
 ## Status
 
-Idea stage — nothing runs yet.
+Under construction on branch `feat/v0`: the SSH layer (accept-all auth, sessions, host key),
+config, the machine profile and the virtual filesystem exist and are tested. The fake shell,
+recorder and model fallback are next — see `CLAUDE.md` for the ordered plan.
+
+```sh
+make build && ./bin/honeypot -addr :2222 -data ./data   # currently answers with a placeholder
+make test && make lint
+```
