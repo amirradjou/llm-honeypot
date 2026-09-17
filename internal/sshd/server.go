@@ -9,8 +9,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -276,11 +278,20 @@ func (s *Server) handleConn(ctx context.Context, nc net.Conn) {
 		}()
 	}
 	sessions.Wait()
-	err = sshConn.Wait()
-	if errors.Is(err, net.ErrClosed) {
-		err = nil
+	s.handler.Disconnected(conn, cleanClose(sshConn.Wait()))
+}
+
+// cleanClose maps the ways a client normally goes away to nil so that
+// Disconnected only carries genuine errors.
+func cleanClose(err error) error {
+	switch {
+	case err == nil, errors.Is(err, io.EOF), errors.Is(err, net.ErrClosed):
+		return nil
+	case strings.Contains(err.Error(), "disconnect, reason 11"):
+		// SSH_DISCONNECT_BY_APPLICATION: the client said goodbye.
+		return nil
 	}
-	s.handler.Disconnected(conn, err)
+	return err
 }
 
 func (s *Server) serverConfig(conn *Conn) *ssh.ServerConfig {
