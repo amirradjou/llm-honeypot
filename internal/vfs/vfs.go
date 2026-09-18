@@ -708,3 +708,16 @@ func (f *FS) WriteOpaque(p string, size int64, prefix []byte, seed uint64, opts 
 	n.content = nil
 	return nil
 }
+
+// Chtimes sets the modification time of p itself (a symlink is not
+// followed), for seeding believable listings.
+func (f *FS) Chtimes(p string, mtime time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n, err := f.lookup(p, false)
+	if err != nil {
+		return err
+	}
+	n.modTime = mtime
+	return nil
+}
