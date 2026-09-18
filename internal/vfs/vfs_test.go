@@ -327,3 +327,36 @@ func TestDeviceNodes(t *testing.T) {
 		t.Fatalf("/dev/sda = %+v", sda)
 	}
 }
+
+func TestOpaqueFiles(t *testing.T) {
+	f := newTestFS(t)
+	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
+	if err := f.WriteOpaque("/tmp/ls", 138208, elf, 42, WriteOptions{Mode: 0o755}); err != nil {
+		t.Fatal(err)
+	}
+	a, info, err := f.ReadFile("/tmp/ls")
+	if err != nil || info.Size != 138208 || len(a) != 138208 || string(a[:4]) != "\x7fELF" {
+		t.Fatalf("opaque = len %d, %+v, %v", len(a), info, err)
+	}
+	b, _, _ := f.ReadFile("/tmp/ls")
+	if string(a) != string(b) {
+		t.Fatal("opaque content must be deterministic")
+	}
+	_ = f.WriteOpaque("/tmp/other", 138208, elf, 43, WriteOptions{})
+	c, _, _ := f.ReadFile("/tmp/other")
+	if string(a) == string(c) {
+		t.Fatal("different seeds must differ")
+	}
+	_ = f.WriteOpaque("/tmp/huge", 200<<20, nil, 1, WriteOptions{})
+	h, info, _ := f.ReadFile("/tmp/huge")
+	if info.Size != 200<<20 || len(h) != MaxOpaqueRead {
+		t.Fatalf("huge: size %d read %d", info.Size, len(h))
+	}
+	// Dynamic files report size 0 like /proc entries do, and Stat must not
+	// run the generator.
+	_ = f.WriteDynamic("/tmp/dyn", func() []byte { t.Fatal("generator run by Stat"); return nil }, WriteOptions{})
+	d, _ := f.Stat("/tmp/dyn")
+	if d.Size != 0 {
+		t.Fatalf("dynamic size = %d", d.Size)
+	}
+}
