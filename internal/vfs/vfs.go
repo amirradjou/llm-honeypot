@@ -666,3 +666,45 @@ func (f *FS) Mknod(p string, typ fs.FileMode, gen Dynamic, opts WriteOptions) er
 
 // IsDevice reports whether the node is a block or character device.
 func (i Info) IsDevice() bool { return i.Mode&fs.ModeDevice != 0 }
+
+// MaxOpaqueRead caps how much of an opaque file a single read produces;
+// an attacker cat-ing a 200 MB payload must not cost 200 MB of memory.
+const MaxOpaqueRead = 4 << 20
+
+// WriteOpaque registers a file that reports size bytes and reads back as
+// deterministic junk (prefix followed by seeded pseudo-random bytes).
+// It stands in for binaries and downloaded payloads without storing them.
+func (f *FS) WriteOpaque(p string, size int64, prefix []byte, seed uint64, opts WriteOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n, err := f.create(p, opts)
+	if err != nil {
+		return err
+	}
+	prefix = append([]byte(nil), prefix...)
+	n.dynamic = func() []byte {
+		want := min(size, MaxOpaqueRead)
+		out := make([]byte, want)
+		copy(out, prefix)
+		// splitmix64 spreads nearby seeds apart before xorshift takes over
+		x := seed + 0x9E3779B97F4A7C15
+		x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9
+		x = (x ^ (x >> 27)) * 0x94D049BB133111EB
+		x ^= x >> 31
+		if x == 0 {
+			x = 1
+		}
+		for i := int64(len(prefix)); i < want; i++ {
+			// xorshift64*: cheap, deterministic, good enough for junk
+			x ^= x >> 12
+			x ^= x << 25
+			x ^= x >> 27
+			out[i] = byte((x * 2685821657736338717) >> 56)
+		}
+		return out
+	}
+	n.size = size
+	n.placeholder = false
+	n.content = nil
+	return nil
+}
