@@ -31,6 +31,8 @@ type Session struct {
 	Rand *rand.Rand
 	// LoginAt is used by `last`, `w`, uptime-of-session, etc.
 	prevPID int
+	// elevated notes a `sudo -i`/`sudo -s` in this session (cosmetic).
+	elevated bool
 }
 
 // NewSession builds a session for user on a fresh clone of m's filesystem.
