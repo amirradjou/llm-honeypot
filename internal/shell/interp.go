@@ -56,6 +56,10 @@ type Interp struct {
 	// Hook, if set, is called for every command just before it runs, for
 	// recording. It must not modify ctx.
 	Hook func(ctx *Context)
+	// FileContent, if set, generates the contents of a placeholder file on
+	// first read (the model backing store). It returns the bytes and whether
+	// it handled the file; false falls back to empty.
+	FileContent func(ctx *Context, path string, info vfs.Info) ([]byte, bool)
 }
 
 // New returns an interpreter with all built-in commands registered.
