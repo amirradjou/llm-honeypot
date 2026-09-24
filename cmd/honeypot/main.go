@@ -14,6 +14,7 @@ import (
 
 	"github.com/amirradjou/llm-honeypot/internal/config"
 	"github.com/amirradjou/llm-honeypot/internal/honeypot"
+	"github.com/amirradjou/llm-honeypot/internal/llm"
 	"github.com/amirradjou/llm-honeypot/internal/machine"
 	"github.com/amirradjou/llm-honeypot/internal/profile"
 	"github.com/amirradjou/llm-honeypot/internal/recorder"
@@ -55,6 +56,12 @@ func run(args []string) error {
 	rec := recorder.New(cfg.DataDir)
 	handler := honeypot.New(m, rec, log)
 
+	if gen, err := buildGenerator(cfg, log); err != nil {
+		return err
+	} else if gen != nil {
+		handler.UseGenerator(llm.NewCache(gen, 0))
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -67,6 +74,30 @@ func run(args []string) error {
 
 	log.Info("honeypot starting", "addr", cfg.Addr, "data", cfg.DataDir)
 	return srv.ListenAndServe(ctx)
+}
+
+// buildGenerator constructs the model backend named by the config, or nil
+// when llm is off. Returns an error only for an unknown backend name.
+func buildGenerator(cfg config.Config, log *slog.Logger) (llm.Generator, error) {
+	switch cfg.LLM {
+	case "", "off", "none":
+		return nil, nil
+	case "anthropic":
+		log.Info("llm backend", "backend", "anthropic", "model", orDefault(cfg.LLMModel, "claude-haiku-4-5"))
+		return llm.NewAnthropic(llm.AnthropicOptions{Model: cfg.LLMModel}), nil
+	case "ollama":
+		log.Info("llm backend", "backend", "ollama", "model", orDefault(cfg.LLMModel, "qwen2.5:3b"))
+		return llm.NewOllama(llm.OllamaOptions{Model: cfg.LLMModel}), nil
+	default:
+		return nil, fmt.Errorf("unknown llm backend %q (want off|anthropic|ollama)", cfg.LLM)
+	}
+}
+
+func orDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
 }
 
 func newLogger(json bool) *slog.Logger {

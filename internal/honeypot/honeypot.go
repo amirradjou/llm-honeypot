@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/amirradjou/llm-honeypot/internal/llm"
 	"github.com/amirradjou/llm-honeypot/internal/machine"
 	"github.com/amirradjou/llm-honeypot/internal/recorder"
 	"github.com/amirradjou/llm-honeypot/internal/shell"
@@ -30,6 +31,7 @@ type Handler struct {
 	log     *slog.Logger
 	seed    int64
 
+	gen   llm.Generator
 	mu    sync.Mutex
 	sinks map[string]*recorder.Sink
 	seq   int64
