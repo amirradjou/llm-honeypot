@@ -87,35 +87,39 @@ func TestEndToEndExecAndRecording(t *testing.T) {
 	}
 	_ = c.Close()
 
-	// Give Disconnected time to flush.
-	deadline := time.Now().Add(3 * time.Second)
-	var files []string
+	// Wait until the recording is complete: Disconnected flushes the final
+	// events asynchronously after the client goes away.
+	deadline := time.Now().Add(5 * time.Second)
+	var types []string
+	var sawDownload, sawAuthAccepted bool
 	for time.Now().Before(deadline) {
-		files = jsonlFiles(t, dataDir)
-		if len(files) > 0 {
+		files := jsonlFiles(t, dataDir)
+		if len(files) == 0 {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		types = types[:0]
+		sawDownload, sawAuthAccepted = false, false
+		for _, line := range readLines(t, files[0]) {
+			var e recorder.Event
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				continue
+			}
+			types = append(types, string(e.Type))
+			if e.Type == recorder.EventDownload && strings.Contains(e.URL, "185.246.0.1") {
+				sawDownload = true
+			}
+			if e.Type == recorder.EventAuth && e.Accepted != nil && *e.Accepted {
+				sawAuthAccepted = true
+			}
+		}
+		if contains(types, "disconnect") {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if len(files) == 0 {
+	if len(types) == 0 {
 		t.Fatal("no recordings written")
-	}
-
-	// Parse the recording and assert the important events are there.
-	var types []string
-	var sawDownload, sawAuthAccepted bool
-	for _, line := range readLines(t, files[0]) {
-		var e recorder.Event
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			continue
-		}
-		types = append(types, string(e.Type))
-		if e.Type == recorder.EventDownload && strings.Contains(e.URL, "185.246.0.1") {
-			sawDownload = true
-		}
-		if e.Type == recorder.EventAuth && e.Accepted != nil && *e.Accepted {
-			sawAuthAccepted = true
-		}
 	}
 	if !sawAuthAccepted {
 		t.Error("no accepted auth recorded")
