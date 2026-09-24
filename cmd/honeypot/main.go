@@ -5,14 +5,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/amirradjou/llm-honeypot/internal/config"
+	"github.com/amirradjou/llm-honeypot/internal/honeypot"
+	"github.com/amirradjou/llm-honeypot/internal/machine"
+	"github.com/amirradjou/llm-honeypot/internal/profile"
+	"github.com/amirradjou/llm-honeypot/internal/recorder"
 	"github.com/amirradjou/llm-honeypot/internal/sshd"
 )
 
@@ -30,10 +34,26 @@ func run(args []string) error {
 	}
 	log := newLogger(cfg.LogJSON)
 
+	prof := profile.Default()
+	if cfg.ProfilePath != "" {
+		prof, err = profile.Load(cfg.ProfilePath)
+		if err != nil {
+			return err
+		}
+	}
+	m, err := machine.New(prof, time.Now)
+	if err != nil {
+		return err
+	}
+	log.Info("machine ready", "hostname", prof.Hostname, "os", prof.OSPretty, "kernel", prof.Kernel)
+
 	hostKey, err := sshd.LoadOrCreateHostKey(filepath.Join(cfg.DataDir, "keys", "ssh_host_ed25519_key"))
 	if err != nil {
 		return err
 	}
+
+	rec := recorder.New(cfg.DataDir)
+	handler := honeypot.New(m, rec, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -43,7 +63,9 @@ func run(args []string) error {
 		AcceptAfter: cfg.AcceptAfter,
 		AuthDelay:   cfg.AuthDelay,
 		IdleTimeout: cfg.IdleTimeout,
-	}, hostKey, &logHandler{log: log}, log)
+	}, hostKey, handler, log)
+
+	log.Info("honeypot starting", "addr", cfg.Addr, "data", cfg.DataDir)
 	return srv.ListenAndServe(ctx)
 }
 
@@ -52,26 +74,4 @@ func newLogger(json bool) *slog.Logger {
 		return slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, nil))
-}
-
-// logHandler is a placeholder until the fake shell exists: it logs every
-// event and tells the attacker the box is busy.
-type logHandler struct{ log *slog.Logger }
-
-func (h *logHandler) Connected(c *sshd.Conn) {
-	h.log.Info("connected", "conn", c.ID, "remote", c.RemoteAddr)
-}
-
-func (h *logHandler) AuthAttempt(c *sshd.Conn, a sshd.AuthAttempt) {
-	h.log.Info("auth", "conn", c.ID, "method", a.Method, "user", a.User, "password", a.Password, "accepted", a.Accepted)
-}
-
-func (h *logHandler) Session(_ context.Context, s *sshd.Session) {
-	h.log.Info("session", "conn", s.Conn.ID, "index", s.Index, "pty", s.PTY != nil, "command", s.Command)
-	_, _ = io.WriteString(s, "System is going down for maintenance, try again later.\r\n")
-	s.Exit(1)
-}
-
-func (h *logHandler) Disconnected(c *sshd.Conn, err error) {
-	h.log.Info("disconnected", "conn", c.ID, "err", err)
 }
