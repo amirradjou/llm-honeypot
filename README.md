@@ -177,6 +177,10 @@ make lint     # gofmt + go vet
 make build    # ./bin/honeypot
 ```
 
+## License
+
+MIT — see [LICENSE](LICENSE).
+
 ## Legal / ethics
 
 This is a defensive tool: it observes unsolicited attacks against a system you
