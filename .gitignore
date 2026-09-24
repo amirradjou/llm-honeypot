@@ -33,3 +33,5 @@ htmlcov/
 # project
 bin/
 data/
+# the binary when built without -o (go build ./cmd/honeypot)
+/honeypot

