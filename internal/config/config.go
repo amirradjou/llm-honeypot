@@ -27,6 +27,11 @@ type Config struct {
 	// ProfilePath is an optional JSON machine profile; empty uses the
 	// built-in default Ubuntu VPS.
 	ProfilePath string
+	// LLM selects the model backend for unknown commands and file
+	// contents: "off" (default), "anthropic" or "ollama".
+	LLM string
+	// LLMModel overrides the backend's default model.
+	LLMModel string
 }
 
 // Load reads env vars, then parses args as flags on top of them.
@@ -50,6 +55,8 @@ func Load(args []string) (Config, error) {
 	}
 	c.LogJSON = os.Getenv("HONEYPOT_LOG_JSON") == "1"
 	c.ProfilePath = os.Getenv("HONEYPOT_PROFILE")
+	c.LLM = envOr("HONEYPOT_LLM", "off")
+	c.LLMModel = os.Getenv("HONEYPOT_LLM_MODEL")
 
 	fs := flag.NewFlagSet("honeypot", flag.ContinueOnError)
 	fs.StringVar(&c.Addr, "addr", c.Addr, "SSH listen address (HONEYPOT_ADDR)")
@@ -59,6 +66,8 @@ func Load(args []string) (Config, error) {
 	fs.DurationVar(&c.IdleTimeout, "idle-timeout", c.IdleTimeout, "close idle sessions after (HONEYPOT_IDLE_TIMEOUT)")
 	fs.BoolVar(&c.LogJSON, "log-json", c.LogJSON, "log as JSON lines (HONEYPOT_LOG_JSON=1)")
 	fs.StringVar(&c.ProfilePath, "profile", c.ProfilePath, "JSON machine profile (HONEYPOT_PROFILE); default is a built-in Ubuntu VPS")
+	fs.StringVar(&c.LLM, "llm", c.LLM, "model backend for unknown commands/files: off|anthropic|ollama (HONEYPOT_LLM)")
+	fs.StringVar(&c.LLMModel, "llm-model", c.LLMModel, "override the backend's default model (HONEYPOT_LLM_MODEL)")
 	if err := fs.Parse(args); err != nil {
 		return c, err
 	}

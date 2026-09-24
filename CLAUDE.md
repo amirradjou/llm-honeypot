@@ -38,10 +38,31 @@ SSH honeypot that hands attackers a convincing LLM-driven fake Linux shell, logs
   handled. Disconnect reason 11 is a clean close, normalised to `nil`.
 - The VFS is a *template*: `Clone()` it per session. Placeholder files (`Info.Placeholder`)
   have no content until a generator fills them; write the result back with `WriteFile`.
-- Downloads are never fetched. Plan: `wget`/`curl` log the URL and create an opaque file;
+- Downloads are never fetched: `wget`/`curl` log the URL and create an opaque file;
   running it prints `cannot execute binary file: Exec format error`.
+- `notFound` (and anything else that stats a user-supplied path) must resolve it
+  with `sess.abs()` first — the VFS only accepts absolute paths, so a raw
+  `./payload` silently becomes "No such file or directory".
+- Never mutate the VFS inside a `vfs.Walk` callback: Walk holds the read lock and
+  a write attempt deadlocks. Collect paths first, then write (see `copyTree`).
+- Injection-shaped command lines are deliberately NOT sent to the model —
+  `command not found` is both safer and more realistic. Keep
+  `llm.SuspectInjection`'s marker list narrow enough that real commands
+  (`ps aux | grep -i previous`) still reach the model; there is a test for that.
+- The weak local model (`qwen2.5:3b`) emits markdown and literal `\n`; `llm.clean`
+  strips those. Prefer Claude for realistic output.
 
-## Status (2026-09-17) — branch `feat/v0`, nothing merged yet
+## Status (2026-09-24) — v1 on branch `feat/v1-llm`; v0 is PR #1, awaiting merge
+v0 is complete and CI-green (PR #1). v1 adds `internal/llm` (Generator + Null/
+Anthropic/Ollama backends, prompt frame, injection pre-filter, validation,
+consistency cache) wired through `honeypot.UseGenerator` into `Interp.Fallback`
+and `Interp.FileContent`, selected by `-llm off|anthropic|ollama`.
+
+Remaining from the original plan: v2 (session clustering, dashboard, monthly
+report), v3 (payload capture sandbox, detection-evasion study), plus registering
+the project in HQ.
+
+## Historical status (2026-09-17) — branch `feat/v0`
 Done and tested: `internal/sshd` (accept-all server, sessions, host key), `internal/config`,
 `internal/profile` (default Ubuntu 22.04 VPS), `internal/vfs` (files, dirs, symlinks, devices,
 permissions, placeholders, dynamic files, clone). `cmd/honeypot` runs the server with a
