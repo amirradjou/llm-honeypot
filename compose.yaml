@@ -1,0 +1,31 @@
+services:
+  honeypot:
+    build: .
+    image: llm-honeypot:latest
+    restart: unless-stopped
+    # Expose the honeypot on a high host port by default. To catch real
+    # bots, map "22:2222" instead and move your real sshd to another port
+    # FIRST. Never run this on a machine that matters.
+    ports:
+      - "2222:2222"
+    environment:
+      HONEYPOT_ADDR: ":2222"
+      HONEYPOT_DATA_DIR: "/data"
+      HONEYPOT_LOG_JSON: "1"
+      # Make a bot work a little before it "logs in".
+      HONEYPOT_ACCEPT_AFTER: "1"
+      HONEYPOT_AUTH_DELAY: "600ms"
+      # Point at a JSON machine profile to change the disguise:
+      # HONEYPOT_PROFILE: "/data/profile.json"
+    volumes:
+      - honeypot-data:/data
+    # Defence in depth: the process never needs to reach the network or
+    # write outside /data.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  honeypot-data:
