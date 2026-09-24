@@ -35,3 +35,7 @@ bin/
 data/
 # the binary when built without -o (go build ./cmd/honeypot)
 /honeypot
+
+# Claude Code project files: local only, never committed
+.claude/
+CLAUDE.md
