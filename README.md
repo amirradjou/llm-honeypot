@@ -152,9 +152,13 @@ attacker ──ssh──► internal/sshd      accept-all auth, session channels
   built-ins grouped by concern (files, system, network, accounts).
 - **`internal/recorder`** — the audit trail.
 
-Two rules shape everything (see `CLAUDE.md`): **never execute attacker input**,
-and **attacker text is data** — it only ever reaches a model inside a fixed
-frame.
+Two rules shape everything in this codebase:
+
+1. **Never execute attacker input.** There is no real shell, no real network from
+   the emulation, and no path by which anything an attacker types runs. Downloads
+   are logged, never fetched.
+2. **Attacker text is data.** It reaches a model only inside a fixed frame, never
+   as an instruction, and what comes back is validated before it is shown.
 
 ## Roadmap
 
