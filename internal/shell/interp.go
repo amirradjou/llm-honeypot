@@ -60,6 +60,18 @@ type Interp struct {
 	// first read (the model backing store). It returns the bytes and whether
 	// it handled the file; false falls back to empty.
 	FileContent func(ctx *Context, path string, info vfs.Info) ([]byte, bool)
+	// OnDownload, if set, is called whenever a command fetches a URL
+	// (wget/curl/tftp/...). The honeypot never actually fetches anything;
+	// this is where the recorder captures the URL for later analysis.
+	OnDownload func(ctx *Context, d Download)
+}
+
+// Download describes an attempted fetch. Nothing is really retrieved.
+type Download struct {
+	Tool    string // "wget", "curl", "tftp", ...
+	URL     string
+	Method  string // GET, POST, ...
+	SavedAs string // absolute path the payload was "written" to, if any
 }
 
 // New returns an interpreter with all built-in commands registered.
