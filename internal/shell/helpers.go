@@ -87,3 +87,18 @@ func uuidFromShell(seed string) string {
 	s := string(b[:])
 	return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
 }
+
+// base64ish makes n stable base64-alphabet characters from a seed, for
+// fake fingerprints and keys the shell prints.
+func base64ish(seed string, n int) string {
+	const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	out := make([]byte, n)
+	x := seedInode(seed)
+	for i := range out {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		out[i] = alpha[x%64]
+	}
+	return string(out)
+}
