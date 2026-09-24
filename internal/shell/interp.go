@@ -244,7 +244,8 @@ func (in *Interp) execSimple(s *Session, c *SimpleCommand, stdin io.Reader, stdo
 func (in *Interp) notFound(ctx *Context) int {
 	name := ctx.Args[0]
 	if strings.ContainsRune(name, '/') {
-		if info, err := ctx.FS().Stat(name); err == nil {
+		abs := ctx.Sess.abs(name)
+		if info, err := ctx.FS().Stat(abs); err == nil {
 			if info.IsDir() {
 				fmt.Fprintf(ctx.Stderr, "-bash: %s: Is a directory\n", name)
 				return 126
@@ -253,6 +254,7 @@ func (in *Interp) notFound(ctx *Context) int {
 				fmt.Fprintf(ctx.Stderr, "-bash: %s: Permission denied\n", name)
 				return 126
 			}
+			_ = abs
 			// Executable but we never run anything: it "runs" and exits 0
 			// unless it is obviously not a program.
 			fmt.Fprintf(ctx.Stderr, "-bash: %s: cannot execute binary file: Exec format error\n", name)

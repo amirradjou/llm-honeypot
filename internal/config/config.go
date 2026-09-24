@@ -24,6 +24,9 @@ type Config struct {
 	IdleTimeout time.Duration
 	// LogJSON switches the operational log to JSON lines.
 	LogJSON bool
+	// ProfilePath is an optional JSON machine profile; empty uses the
+	// built-in default Ubuntu VPS.
+	ProfilePath string
 }
 
 // Load reads env vars, then parses args as flags on top of them.
@@ -46,6 +49,7 @@ func Load(args []string) (Config, error) {
 		return c, err
 	}
 	c.LogJSON = os.Getenv("HONEYPOT_LOG_JSON") == "1"
+	c.ProfilePath = os.Getenv("HONEYPOT_PROFILE")
 
 	fs := flag.NewFlagSet("honeypot", flag.ContinueOnError)
 	fs.StringVar(&c.Addr, "addr", c.Addr, "SSH listen address (HONEYPOT_ADDR)")
@@ -54,6 +58,7 @@ func Load(args []string) (Config, error) {
 	fs.DurationVar(&c.AuthDelay, "auth-delay", c.AuthDelay, "delay before answering auth (HONEYPOT_AUTH_DELAY)")
 	fs.DurationVar(&c.IdleTimeout, "idle-timeout", c.IdleTimeout, "close idle sessions after (HONEYPOT_IDLE_TIMEOUT)")
 	fs.BoolVar(&c.LogJSON, "log-json", c.LogJSON, "log as JSON lines (HONEYPOT_LOG_JSON=1)")
+	fs.StringVar(&c.ProfilePath, "profile", c.ProfilePath, "JSON machine profile (HONEYPOT_PROFILE); default is a built-in Ubuntu VPS")
 	if err := fs.Parse(args); err != nil {
 		return c, err
 	}
