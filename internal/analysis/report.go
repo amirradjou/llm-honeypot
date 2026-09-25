@@ -184,6 +184,8 @@ func short(d time.Duration) string {
 	switch {
 	case d <= 0:
 		return "0s"
+	case d < time.Second:
+		return fmt.Sprintf("%.1fs", d.Seconds())
 	case d < time.Minute:
 		return fmt.Sprintf("%.0fs", d.Seconds())
 	case d < time.Hour:

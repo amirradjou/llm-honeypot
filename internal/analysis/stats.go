@@ -186,30 +186,51 @@ func Summarise(sessions []*Session) Stats {
 		st.SessionsByDay[s.Start.UTC().Format("2006-01-02")]++
 		st.SourceIPs.Add(s.RemoteIP)
 
+		// Tally credentials once per session per distinct value. An SSH
+		// client retries the same username across several auth methods, so
+		// counting raw attempts would report the client's mechanics rather
+		// than what the attacker actually tried.
+		seenUser, seenPass, seenPair := map[string]bool{}, map[string]bool{}, map[string]bool{}
 		for _, a := range s.Auths {
-			// Key attempts have no password; count them by user only.
-			st.Usernames.Add(a.User)
-			st.Passwords.Add(a.Password)
+			if a.User != "" && !seenUser[a.User] {
+				seenUser[a.User] = true
+				st.Usernames.Add(a.User)
+			}
+			if a.Password != "" && !seenPass[a.Password] {
+				seenPass[a.Password] = true
+				st.Passwords.Add(a.Password)
+			}
 			if a.Password != "" {
-				st.CredPairs.Add(a.User + ":" + a.Password)
+				pair := a.User + ":" + a.Password
+				if !seenPair[pair] {
+					seenPair[pair] = true
+					st.CredPairs.Add(pair)
+				}
 			}
 		}
 		if s.Accepted != nil {
 			st.Authenticated++
 		}
 
+		n := s.CommandCount()
 		dwells = append(dwells, s.Duration)
-		cmdCounts = append(cmdCounts, len(s.Commands))
-		st.TotalCommands += len(s.Commands)
+		cmdCounts = append(cmdCounts, n)
+		st.TotalCommands += n
 		st.ModelCalls += s.ModelCalls
 
 		if len(s.Commands) > 0 {
 			st.WithCommands++
-			st.FirstCommands.Add(s.Commands[0].Line)
+			if parts := s.Commands[0].Parts(); len(parts) > 0 {
+				st.FirstCommands.Add(parts[0])
+			}
 		}
 		for _, c := range s.Commands {
-			st.AllCommands.Add(c.Line)
-			st.CommandNames.Add(c.Name())
+			for _, part := range c.Parts() {
+				st.AllCommands.Add(part)
+			}
+			for _, name := range c.Names() {
+				st.CommandNames.Add(name)
+			}
 		}
 		for _, d := range s.Downloads {
 			st.TotalDownloads++
@@ -221,7 +242,7 @@ func Summarise(sessions []*Session) Stats {
 		switch {
 		case s.Accepted != nil && len(s.Commands) == 0:
 			st.Silent++
-		case len(s.Commands) <= probeMaxCommands && s.Duration <= probeMaxDwell:
+		case n <= probeMaxCommands && s.Duration <= probeMaxDwell:
 			st.Probes++
 		}
 	}

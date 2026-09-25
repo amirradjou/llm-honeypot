@@ -42,6 +42,22 @@ type Command struct {
 // the file happens to be called.
 var dropDirs = []string{"/tmp/", "/var/tmp/", "/var/run/", "/run/", "/dev/shm/", "/mnt/", "/root/"}
 
+// Parts returns the individual commands on this line. One recorded line
+// usually chains several ("cd /tmp; wget ...; ./x").
+func (c Command) Parts() []string { return splitLine(c.Line) }
+
+// Names returns the command word of each part, normalised for clustering.
+func (c Command) Names() []string {
+	parts := c.Parts()
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if n := (Command{Line: p}).Name(); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // Name is the command word used for fingerprinting, e.g. "wget" for
 // "wget http://x -O y". A leading directory is stripped so /bin/busybox
 // and busybox cluster together, and running a dropped file collapses to
@@ -136,13 +152,24 @@ func (s *Session) Fingerprint() string {
 	if len(s.Commands) == 0 {
 		return "(no commands)"
 	}
-	names := make([]string, 0, len(s.Commands))
+	var names []string
 	for _, c := range s.Commands {
-		if n := c.Name(); n != "" {
-			names = append(names, n)
-		}
+		names = append(names, c.Names()...)
+	}
+	if len(names) == 0 {
+		return "(no commands)"
 	}
 	return strings.Join(names, " → ")
+}
+
+// CommandCount is how many commands ran, counting each one on a chained
+// line separately.
+func (s *Session) CommandCount() int {
+	n := 0
+	for _, c := range s.Commands {
+		n += len(c.Parts())
+	}
+	return n
 }
 
 // FirstCommand returns the first command line, or "".

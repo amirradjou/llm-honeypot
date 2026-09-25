@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -22,10 +23,41 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := dispatch(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "honeypot:", err)
 		os.Exit(1)
 	}
+}
+
+// dispatch routes to a subcommand. Anything that is not a known
+// subcommand is treated as flags for `serve`, so the historical
+// invocation (and the container entrypoint, which passes no arguments at
+// all) keeps working unchanged.
+func dispatch(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "serve":
+			return run(args[1:])
+		case "report":
+			return runReport(args[1:])
+		case "help", "-h", "--help":
+			usage(os.Stdout)
+			return nil
+		}
+	}
+	return run(args)
+}
+
+func usage(w io.Writer) {
+	fmt.Fprint(w, `honeypot — an SSH honeypot with a fake, optionally LLM-driven shell
+
+Usage:
+  honeypot [serve] [flags]   run the honeypot (the default)
+  honeypot report [flags]    summarise what the bots did, as Markdown
+  honeypot help              show this message
+
+Run `+"`honeypot serve -h`"+` or `+"`honeypot report -h`"+` for the flags of each.
+`)
 }
 
 func run(args []string) error {
