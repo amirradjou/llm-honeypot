@@ -79,3 +79,26 @@ func TestDispatchKeepsBackwardCompatibility(t *testing.T) {
 		t.Error("expected flag parsing to reject an unknown serve flag")
 	}
 }
+
+func TestIsLoopback(t *testing.T) {
+	loopback := []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080", "127.0.0.53:9"}
+	for _, a := range loopback {
+		if !isLoopback(a) {
+			t.Errorf("%q should be loopback", a)
+		}
+	}
+	// Anything reachable from off-host must trip the warning, including the
+	// wildcard - that is the case an operator is most likely to get wrong.
+	public := []string{"0.0.0.0:8080", ":8080", "192.168.1.5:8080", "[::]:8080", "example.com:80", "garbage"}
+	for _, a := range public {
+		if isLoopback(a) {
+			t.Errorf("%q should NOT be treated as loopback", a)
+		}
+	}
+}
+
+func TestDashboardCommandRejectsBadFlag(t *testing.T) {
+	if err := runDashboard([]string{"-nonsense"}); err == nil {
+		t.Error("expected an error for an unknown flag")
+	}
+}

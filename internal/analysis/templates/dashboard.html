@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="refresh" content="{{ .RefreshSeconds }}">
+<title>Honeypot — what the bots did</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --panel: #ffffff; --ink: #1c1b19; --muted: #6b6864;
+    --line: #e5e1db; --accent: #9a3412; --bar: #c2410c; --good: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614; --panel: #1f1e1b; --ink: #ece9e4; --muted: #9c9891;
+      --line: #322f2b; --accent: #fb923c; --bar: #ea580c; --good: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 28px; }
+  h2 { font-size: 1rem; margin: 32px 0 12px; text-transform: uppercase;
+       letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .n { font-size: 1.6rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .card .l { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .bar { height: 8px; background: var(--bar); border-radius: 4px; min-width: 2px; }
+  .barrow { display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 10px; padding: 3px 0; }
+  .cluster { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; margin: 14px 0; }
+  .cluster .fp { font-family: ui-monospace, monospace; font-size: 0.88rem; word-break: break-word; }
+  .cluster .meta { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+  .note { color: var(--muted); font-size: 0.85rem; }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>What the bots did</h1>
+  <div class="sub">
+    Generated {{ .Generated }} · reloads every {{ .RefreshSeconds }}s ·
+    <a href="/report.md">Markdown report</a>
+  </div>
+
+{{ if eq .Stats.Sessions 0 }}
+  <div class="panel empty">
+    No sessions recorded yet. Expose the honeypot and come back.
+  </div>
+{{ else }}
+
+  <div class="cards">
+    <div class="card"><div class="n">{{ .Stats.Sessions }}</div><div class="l">Sessions</div></div>
+    <div class="card"><div class="n">{{ .Stats.PerDay }}</div><div class="l">Per day</div></div>
+    <div class="card"><div class="n">{{ .Stats.SourceIPs.Distinct }}</div><div class="l">Source IPs</div></div>
+    <div class="card"><div class="n">{{ .Stats.TotalCommands }}</div><div class="l">Commands</div></div>
+    <div class="card"><div class="n">{{ .Stats.DwellMedianShort }}</div><div class="l">Median dwell</div></div>
+    <div class="card"><div class="n">{{ .Stats.TotalDownloads }}</div><div class="l">Downloads</div></div>
+    <div class="card"><div class="n">{{ .Stats.ModelCalls }}</div><div class="l">Model calls</div></div>
+    <div class="card"><div class="n">{{ .Stats.ProbeShare }}%</div><div class="l">Lost interest</div></div>
+  </div>
+
+  <h2>Did they suspect anything?</h2>
+  <div class="panel">
+    <p class="note" style="margin-top:0">
+      <strong>{{ .Stats.Silent }}</strong> session(s) authenticated and never ran a command;
+      <strong>{{ .Stats.Probes }}</strong> ran a single look-around command and left almost
+      immediately. Both are the shape a bot makes when it decides a box is not worth its
+      time — a rising share means the disguise is slipping.
+    </p>
+  </div>
+
+  {{ if .Days }}
+  <h2>Sessions per day</h2>
+  <div class="panel">
+    {{ range .Days }}
+    <div class="barrow">
+      <span class="mono">{{ .Day }}</span>
+      <span class="n mono">{{ .Count }}</span>
+      <span class="bar" style="width: {{ .Percent }}%"></span>
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  <h2>Attacker behaviours</h2>
+  <div class="panel">
+    <p class="note" style="margin-top:0">
+      Sessions grouped by the exact sequence of commands they ran. Payload names are
+      normalised, so two bots differing only in the binary they fetched appear as one.
+    </p>
+    {{ range .Clusters }}
+    <div class="cluster">
+      <div class="fp">{{ .Fingerprint }}</div>
+      <div class="meta">
+        {{ .Size }} session(s) · {{ .SourceIPList }}
+        {{ with .CredentialList }} · <span class="mono">{{ . }}</span>{{ end }}
+      </div>
+    </div>
+    {{ end }}
+  </div>
+
+  <h2>Rankings</h2>
+  <div class="grid2">
+    {{ range .Tables }}{{ if .Rows }}
+    <div class="panel">
+      <table>
+        <thead><tr><th>{{ .Column }}</th><th class="n">count</th></tr></thead>
+        <tbody>
+          {{ range .Rows }}<tr><td class="mono">{{ .Value }}</td><td class="n">{{ .Count }}</td></tr>{{ end }}
+        </tbody>
+      </table>
+      {{ if gt .Total (len .Rows) }}<div class="note" style="margin-top:8px">{{ .Total }} distinct in total.</div>{{ end }}
+    </div>
+    {{ end }}{{ end }}
+  </div>
+
+  <h2>Recent sessions</h2>
+  <div class="panel">
+    <table>
+      <thead><tr><th>when (UTC)</th><th>source</th><th>user</th><th class="n">cmds</th><th class="n">dwell</th><th>behaviour</th></tr></thead>
+      <tbody>
+        {{ range .Recent }}
+        <tr>
+          <td class="mono">{{ .Started }}</td>
+          <td class="mono">{{ .RemoteIP }}</td>
+          <td class="mono">{{ .User }}</td>
+          <td class="n">{{ .NumCommands }}</td>
+          <td class="n mono">{{ .Short }}</td>
+          <td class="mono">{{ .Summary }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+
+{{ end }}
+</div>
+</body>
+</html>
