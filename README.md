@@ -25,6 +25,10 @@ consistent with the machine it is pretending to be.
 - **Everything is recorded**: a machine-readable JSONL event log and a
   human-readable transcript per connection, with URLs, IPs and file hashes
   extracted from what the attacker types.
+- **`honeypot report`** turns those recordings into a "what the bots did"
+  summary: sessions clustered into distinct attacker behaviours, top credentials
+  and commands, payload families, dwell times, and how many visitors seemed to
+  work out it was a honeypot.
 - **Nothing is ever executed.** No real shell, no real network. `wget`/`curl`
   log the URL and drop an opaque placeholder file so later commands behave as if
   the download worked; running that file reports `cannot execute binary file`.
@@ -42,6 +46,10 @@ ssh -p 2222 root@localhost    # try: uname -a, ps aux, cat /etc/passwd, wget htt
 ls data/sessions/<date>/
 cat data/sessions/<date>/<conn>.log      # human transcript
 cat data/sessions/<date>/<conn>.jsonl    # structured events
+
+# Summarise it
+./bin/honeypot report                    # Markdown to stdout
+./bin/honeypot report -transcript -o report.md
 ```
 
 ### With Docker
@@ -69,6 +77,31 @@ Flags override environment variables; both are optional.
 | `-log-json` | `HONEYPOT_LOG_JSON=1` | off | operational log as JSON lines |
 | `-llm` | `HONEYPOT_LLM` | `off` | model backend: `off`, `anthropic`, `ollama` |
 | `-llm-model` | `HONEYPOT_LLM_MODEL` | per backend | override the model id |
+
+### Reading the results
+
+```sh
+honeypot report [-data ./data] [-o report.md] [-top 10] [-clusters 5] [-transcript]
+```
+
+`report` only reads, so it is safe to run while the honeypot is live. The output
+covers, in order: an overview (sessions per day, dwell-time percentiles, commands
+per session), how many sessions look like a bot that suspected something, ranked
+tables of credentials / first commands / command names / source IPs / payload
+hosts and families, the behaviour clusters, and a per-day bar chart.
+
+**Clustering** groups sessions by the exact sequence of commands they ran. Two
+normalisations make that useful: a leading path is stripped (so `/bin/busybox`
+and `busybox` match) and running a file out of a writable drop directory
+collapses to `./payload`, so two bots that differ only in the binary they fetched
+show up as one behaviour rather than two. Chained lines are split with the
+honeypot's own shell parser, so `cd /tmp; wget …; chmod +x x; ./x` counts as four
+commands and clusters on all four.
+
+**Honeypot detection.** The report separates sessions that authenticated and ran
+nothing (`Silent`) from those that ran a single look-around command and left
+within ten seconds (`Probes`). A rising share of either is the signal that the
+disguise is slipping.
 
 ### The model backend (optional)
 
@@ -138,6 +171,9 @@ attacker ──ssh──► internal/sshd      accept-all auth, session channels
  internal/llm    model backend for unknown commands and placeholder
                  files: fixed prompt frame, injection pre-filter,
                  output validation, consistency cache
+
+ internal/analysis   reads the recordings back: sessions → clusters →
+ (honeypot report)   statistics → the Markdown report
 ```
 
 - **`internal/vfs`** — an in-memory filesystem with Unix permissions, symlinks,
@@ -151,6 +187,8 @@ attacker ──ssh──► internal/sshd      accept-all auth, session channels
   splitting, pipelines, `&&`/`||`/`;`, redirections into the VFS, and command
   built-ins grouped by concern (files, system, network, accounts).
 - **`internal/recorder`** — the audit trail.
+- **`internal/analysis`** — reads the audit trail back: reconstructs sessions,
+  clusters them into behaviours, computes the statistics and renders the report.
 
 Two rules shape everything in this codebase:
 
@@ -167,11 +205,13 @@ Two rules shape everything in this codebase:
 - **v1 (done)** — LLM fallback for unknown commands and file contents,
   constrained to stay consistent with the machine state; pluggable model backend
   (Claude / Ollama / off) with prompt-injection defences.
+- **v2 (done)** — session reconstruction, behaviour clustering, and the
+  "what the bots did" report with honeypot-detection signals.
+
 ← you are here
 
-- **v2** — session clustering, a dashboard, the first monthly "what the bots did"
-  report.
-- **v3** — payload capture into an isolated sandbox; honeypot-detection study.
+- **v3** — payload capture into an isolated sandbox; a longer-running
+  honeypot-detection study; a served dashboard rather than a generated file.
 
 ## Development
 
