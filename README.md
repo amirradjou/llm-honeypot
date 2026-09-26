@@ -28,7 +28,8 @@ consistent with the machine it is pretending to be.
 - **`honeypot report`** turns those recordings into a "what the bots did"
   summary: sessions clustered into distinct attacker behaviours, top credentials
   and commands, payload families, dwell times, and how many visitors seemed to
-  work out it was a honeypot.
+  work out it was a honeypot. **`honeypot dashboard`** serves the same thing as
+  a live page.
 - **Nothing is ever executed.** No real shell, no real network. `wget`/`curl`
   log the URL and drop an opaque placeholder file so later commands behave as if
   the download worked; running that file reports `cannot execute binary file`.
@@ -50,6 +51,7 @@ cat data/sessions/<date>/<conn>.jsonl    # structured events
 # Summarise it
 ./bin/honeypot report                    # Markdown to stdout
 ./bin/honeypot report -transcript -o report.md
+./bin/honeypot dashboard                 # live page on 127.0.0.1:8080
 ```
 
 ### With Docker
@@ -78,6 +80,8 @@ Flags override environment variables; both are optional.
 | `-llm` | `HONEYPOT_LLM` | `off` | model backend: `off`, `anthropic`, `ollama` |
 | `-llm-model` | `HONEYPOT_LLM_MODEL` | per backend | override the model id |
 
+The `dashboard` subcommand also reads `HONEYPOT_DASHBOARD_ADDR`.
+
 ### Reading the results
 
 ```sh
@@ -102,6 +106,60 @@ commands and clusters on all four.
 nothing (`Silent`) from those that ran a single look-around command and left
 within ten seconds (`Probes`). A rising share of either is the signal that the
 disguise is slipping.
+
+### The dashboard
+
+```sh
+honeypot dashboard [-addr 127.0.0.1:8080] [-data ./data] [-refresh 5s]
+```
+
+Serves `/` (the page), `/report.md` and `/healthz`. The page is entirely
+self-contained — no scripts, no external assets — so it works on an isolated host
+and cannot phone home, and it refreshes itself with a `<meta refresh>` derived
+from the read interval.
+
+It **binds to loopback by default**, and that is the right default: the page is a
+summary of hostile activity, sitting on a machine deliberately inviting
+attackers. Reach it over a tunnel rather than publishing it:
+
+```sh
+ssh -L 8080:127.0.0.1:8080 you@honeypot-host
+```
+
+A non-loopback bind is honoured but prints a warning.
+
+### Capturing payloads
+
+The honeypot never fetches anything an attacker points at — it logs the URL and
+moves on. `honeypot fetch` is the separate, deliberate step that goes and gets
+them for analysis:
+
+```sh
+honeypot fetch                  # dry run: lists what it would download
+honeypot fetch -confirm         # actually downloads, into <data>/payloads
+```
+
+**Read this before using `-confirm`.** It pulls live malware onto the machine
+that runs it, and each request tells the attacker's server that somebody is
+looking at them — which can get your address flagged, blocked, or targeted. Run
+it somewhere disposable, or not at all. The dry run exists so the dangerous thing
+is never the default.
+
+What it does to keep that bounded:
+
+- **Refuses private and local addresses.** Loopback, RFC1918, link-local
+  (including cloud metadata at `169.254.169.254`), CGNAT, documentation and
+  reserved ranges are all blocked. The check runs in the dialer, against the
+  address actually being connected to, so DNS rebinding cannot walk past it.
+- **http and https only**, redirects re-checked at every hop and bounded.
+- **Size-capped** (8 MiB by default), with truncation recorded rather than
+  silently filling the disk; compression is disabled so a small response cannot
+  expand past the cap.
+- **Content-addressed storage**: one binary served from twenty hosts is stored
+  once with twenty URLs against it, which is how a payload family becomes
+  visible.
+- **Nothing is ever executed.** Blobs are written `0600`, with no execute bit,
+  into a `0700` quarantine directory.
 
 ### The model backend (optional)
 
@@ -188,7 +246,11 @@ attacker ──ssh──► internal/sshd      accept-all auth, session channels
   built-ins grouped by concern (files, system, network, accounts).
 - **`internal/recorder`** — the audit trail.
 - **`internal/analysis`** — reads the audit trail back: reconstructs sessions,
-  clusters them into behaviours, computes the statistics and renders the report.
+  clusters them into behaviours, computes the statistics, and renders both the
+  Markdown report and the dashboard.
+- **`internal/capture`** — the quarantine store and the guarded fetcher behind
+  `honeypot fetch`. The only code in the project that touches the network, and
+  only when asked.
 
 Two rules shape everything in this codebase:
 
@@ -207,11 +269,14 @@ Two rules shape everything in this codebase:
   (Claude / Ollama / off) with prompt-injection defences.
 - **v2 (done)** — session reconstruction, behaviour clustering, and the
   "what the bots did" report with honeypot-detection signals.
+- **v3 (done)** — a served dashboard, and opt-in payload capture into a
+  no-execute quarantine behind an SSRF-guarded fetcher.
 
 ← you are here
 
-- **v3** — payload capture into an isolated sandbox; a longer-running
-  honeypot-detection study; a served dashboard rather than a generated file.
+- **Next** — run it somewhere real for long enough to have something to say:
+  a detection study built on actual bot traffic, and static analysis of whatever
+  the quarantine collects.
 
 ## Development
 
