@@ -42,6 +42,8 @@ func dispatch(args []string) error {
 			return runReport(args[1:])
 		case "dashboard":
 			return runDashboard(args[1:])
+		case "fetch":
+			return runFetch(args[1:])
 		case "help", "-h", "--help":
 			usage(os.Stdout)
 			return nil
@@ -57,6 +59,8 @@ Usage:
   honeypot [serve] [flags]   run the honeypot (the default)
   honeypot report [flags]    summarise what the bots did, as Markdown
   honeypot dashboard [flags] serve that summary live (loopback by default)
+  honeypot fetch [flags]     download recorded payloads into quarantine
+                             (dry run unless -confirm; pulls live malware)
   honeypot help              show this message
 
 Run `+"`honeypot <subcommand> -h`"+` for the flags of each.
