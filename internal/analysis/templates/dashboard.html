@@ -137,7 +137,7 @@
         {{ range .Recent }}
         <tr>
           <td class="mono">{{ .Started }}</td>
-          <td class="mono">{{ .RemoteIP }}</td>
+          <td class="mono">{{ .RemoteIP }}{{ if .Country }} ({{ .Country }}){{ end }}</td>
           <td class="mono">{{ .User }}</td>
           <td class="n">{{ .NumCommands }}</td>
           <td class="n mono">{{ .Short }}</td>
@@ -149,6 +149,7 @@
   </div>
 
 {{ end }}
-</div>
+{{ if .Attribution }}  <div class="note" style="margin-top:24px">{{ .Attribution }}</div>
+{{ end }}</div>
 </body>
 </html>

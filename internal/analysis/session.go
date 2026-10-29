@@ -127,6 +127,10 @@ type Session struct {
 	ConnID   string
 	Remote   string // ip:port as recorded
 	RemoteIP string
+	// Country (ISO code) and Network ("AS14061 DigitalOcean, LLC") are
+	// filled by Locate from a local database; empty without one.
+	Country  string
+	Network  string
 	Start    time.Time
 	End      time.Time
 	Duration time.Duration

@@ -27,8 +27,18 @@ func runDashboard(args []string) error {
 	addr := fs.String("addr", envOr("HONEYPOT_DASHBOARD_ADDR", "127.0.0.1:8080"), "listen address (HONEYPOT_DASHBOARD_ADDR)")
 	dataDir := fs.String("data", envOr("HONEYPOT_DATA_DIR", "./data"), "data directory holding sessions/ (HONEYPOT_DATA_DIR)")
 	ttl := fs.Duration("refresh", 5*time.Second, "how often the recordings may be re-read")
+	geo := addGeoFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	handler := analysis.NewDashboard(*dataDir, *ttl)
+	db, err := geo.open()
+	if err != nil {
+		return err
+	}
+	if db != nil {
+		defer db.Close()
+		handler.WithLocator(db, db.Attribution())
 	}
 
 	if !isLoopback(*addr) {
@@ -40,7 +50,7 @@ func runDashboard(args []string) error {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           analysis.NewDashboard(*dataDir, *ttl),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

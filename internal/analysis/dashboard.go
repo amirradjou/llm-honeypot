@@ -23,6 +23,9 @@ type Dashboard struct {
 	// loop cannot turn into a disk-read loop.
 	ttl time.Duration
 	now func() time.Time
+	// locate and attribution are set by WithLocator.
+	locate      Locator
+	attribution string
 
 	mu       sync.Mutex
 	cached   []*Session
@@ -36,6 +39,13 @@ func NewDashboard(dataDir string, ttl time.Duration) *Dashboard {
 		ttl = 5 * time.Second
 	}
 	return &Dashboard{dataDir: dataDir, ttl: ttl, now: time.Now}
+}
+
+// WithLocator adds countries and networks to the page from a local IP
+// database, with the credit line its licence asks for.
+func (d *Dashboard) WithLocator(loc Locator, attribution string) *Dashboard {
+	d.locate, d.attribution = loc, attribution
+	return d
 }
 
 // refreshSeconds is how often the page asks the browser to reload. It is
@@ -63,6 +73,7 @@ func (d *Dashboard) sessions() ([]*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	Locate(s, d.locate)
 	d.cached, d.cachedAt = s, d.now()
 	return s, nil
 }
@@ -95,7 +106,7 @@ func (d *Dashboard) serveMarkdown(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := WriteReport(&buf, sessions, ReportOptions{Transcript: true}); err != nil {
+	if err := WriteReport(&buf, sessions, ReportOptions{Transcript: true, Attribution: d.attribution}); err != nil {
 		http.Error(w, "cannot render report", http.StatusInternalServerError)
 		return
 	}
@@ -114,6 +125,7 @@ type view struct {
 	Recent         []*Session
 	Days           []dayBar
 	Tables         []table
+	Attribution    string
 }
 
 type dayBar struct {
@@ -149,6 +161,7 @@ func (d *Dashboard) buildView(sessions []*Session) view {
 	v := view{
 		Generated:      d.now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		RefreshSeconds: d.refreshSeconds(),
+		Attribution:    d.attribution,
 		Stats:          st,
 		Clusters:       ClusterSessions(sessions),
 	}
@@ -159,6 +172,8 @@ func (d *Dashboard) buildView(sessions []*Session) view {
 		{"First command", "command", st.FirstCommands.Top(10), st.FirstCommands.Distinct()},
 		{"Commands", "command", st.CommandNames.Top(10), st.CommandNames.Distinct()},
 		{"Source IPs", "ip", st.SourceIPs.Top(10), st.SourceIPs.Distinct()},
+		{"Source countries", "country", st.Countries.Top(10), st.Countries.Distinct()},
+		{"Source networks", "AS", st.Networks.Top(10), st.Networks.Distinct()},
 		{"Payload hosts", "host", st.DownloadHosts.Top(10), st.DownloadHosts.Distinct()},
 		{"Payload families", "file", st.PayloadNames.Top(10), st.PayloadNames.Distinct()},
 	}
