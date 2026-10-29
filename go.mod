@@ -4,6 +4,8 @@ go 1.26.8
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.75.0
+	github.com/maxmind/mmdbwriter v1.2.0
+	github.com/oschwald/maxminddb-golang/v2 v2.8.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/term v0.46.0
 )
@@ -19,6 +21,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/sync v0.16.0 // indirect
+	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )

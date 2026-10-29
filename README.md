@@ -86,6 +86,7 @@ The `dashboard` subcommand also reads `HONEYPOT_DASHBOARD_ADDR`.
 
 ```sh
 honeypot report [-data ./data] [-o report.md] [-top 10] [-clusters 5] [-transcript]
+                [-geoip-country FILE] [-geoip-asn FILE]
 ```
 
 `report` only reads, so it is safe to run while the honeypot is live. The output
@@ -102,6 +103,21 @@ show up as one behaviour rather than two. Chained lines are split with the
 honeypot's own shell parser, so `cd /tmp; wget …; chmod +x x; ./x` counts as four
 commands and clusters on all four.
 
+**Where they come from.** With an IP database the report and the dashboard also
+rank the source countries and networks (`AS14061 DigitalOcean, LLC`). Lookups are
+done locally against MaxMind-format files, so no attacker IP is ever sent to a
+third party. `scripts/get-geoip.sh` downloads this month's
+[DB-IP Lite](https://db-ip.com/db/lite.php) country and ASN databases (free, no
+account) into `./geoip/`; GeoLite2 files work too. DB-IP Lite is CC BY 4.0, so
+the report and the page end with its credit line.
+
+```sh
+scripts/get-geoip.sh
+./bin/honeypot report -geoip-country geoip/dbip-country-lite.mmdb -geoip-asn geoip/dbip-asn-lite.mmdb
+```
+
+The flags can also come from `HONEYPOT_GEOIP_COUNTRY` and `HONEYPOT_GEOIP_ASN`.
+
 **Honeypot detection.** The report separates sessions that authenticated and ran
 nothing (`Silent`) from those that ran a single look-around command and left
 within ten seconds (`Probes`). A rising share of either is the signal that the
@@ -111,6 +127,7 @@ disguise is slipping.
 
 ```sh
 honeypot dashboard [-addr 127.0.0.1:8080] [-data ./data] [-refresh 5s]
+                   [-geoip-country FILE] [-geoip-asn FILE]
 ```
 
 Serves `/` (the page), `/report.md` and `/healthz`. The page is entirely
@@ -271,6 +288,8 @@ Two rules shape everything in this codebase:
   "what the bots did" report with honeypot-detection signals.
 - **v3 (done)** — a served dashboard, and opt-in payload capture into a
   no-execute quarantine behind an SSRF-guarded fetcher.
+- **v3.1 (done)** — source countries and networks from a local IP database
+  (DB-IP Lite or GeoLite2), in the report and on the dashboard.
 
 ← you are here
 

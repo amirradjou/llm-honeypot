@@ -142,6 +142,8 @@ type Stats struct {
 	AllCommands   *Counter
 	CommandNames  *Counter
 	SourceIPs     *Counter
+	Countries     *Counter
+	Networks      *Counter
 	DownloadHosts *Counter
 	DownloadURLs  *Counter
 	PayloadNames  *Counter
@@ -164,6 +166,8 @@ func Summarise(sessions []*Session) Stats {
 		AllCommands:   NewCounter(),
 		CommandNames:  NewCounter(),
 		SourceIPs:     NewCounter(),
+		Countries:     NewCounter(),
+		Networks:      NewCounter(),
 		DownloadHosts: NewCounter(),
 		DownloadURLs:  NewCounter(),
 		PayloadNames:  NewCounter(),
@@ -185,6 +189,8 @@ func Summarise(sessions []*Session) Stats {
 		}
 		st.SessionsByDay[s.Start.UTC().Format("2006-01-02")]++
 		st.SourceIPs.Add(s.RemoteIP)
+		st.Countries.Add(s.Country)
+		st.Networks.Add(s.Network)
 
 		// Tally credentials once per session per distinct value. An SSH
 		// client retries the same username across several auth methods, so

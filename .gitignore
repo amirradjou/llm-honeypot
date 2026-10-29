@@ -39,3 +39,7 @@ data/
 # Claude Code project files: local only, never committed
 .claude/
 CLAUDE.md
+
+# IP databases from scripts/get-geoip.sh
+/geoip/
+*.mmdb

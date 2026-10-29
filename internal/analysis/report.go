@@ -18,6 +18,9 @@ type ReportOptions struct {
 	Clusters int
 	// Transcript includes the command lines of each cluster's example.
 	Transcript bool
+	// Attribution is the credit line the IP databases' licences ask for,
+	// printed at the end when set.
+	Attribution string
 }
 
 func (o ReportOptions) withDefaults() ReportOptions {
@@ -80,6 +83,12 @@ func WriteReport(w io.Writer, sessions []*Session, opts ReportOptions) error {
 	p.table("First command of a session", "command", st.FirstCommands, opts.TopN)
 	p.table("Commands (by name)", "command", st.CommandNames, opts.TopN)
 	p.table("Busiest source IPs", "ip", st.SourceIPs, opts.TopN)
+	if st.Countries.Total() > 0 {
+		p.table("Source countries", "country", st.Countries, opts.TopN)
+	}
+	if st.Networks.Total() > 0 {
+		p.table("Source networks", "AS", st.Networks, opts.TopN)
+	}
 
 	if st.TotalDownloads > 0 {
 		p.table("Payload hosts", "host", st.DownloadHosts, opts.TopN)
@@ -89,6 +98,9 @@ func WriteReport(w io.Writer, sessions []*Session, opts ReportOptions) error {
 
 	p.writeClusters(sessions, opts)
 	p.writeDaily(st)
+	if opts.Attribution != "" {
+		p.line("_%s_", opts.Attribution)
+	}
 	return p.err
 }
 

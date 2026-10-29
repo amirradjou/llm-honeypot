@@ -20,6 +20,7 @@ func runReport(args []string) error {
 	topN := fs.Int("top", 10, "rows per ranked table")
 	clusters := fs.Int("clusters", 5, "how many attacker behaviours to describe")
 	transcript := fs.Bool("transcript", false, "include an example transcript for each behaviour")
+	geo := addGeoFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -27,6 +28,16 @@ func runReport(args []string) error {
 	sessions, err := analysis.Load(*dataDir)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", *dataDir, err)
+	}
+	db, err := geo.open()
+	if err != nil {
+		return err
+	}
+	var attribution string
+	if db != nil {
+		defer db.Close()
+		analysis.Locate(sessions, db)
+		attribution = db.Attribution()
 	}
 
 	var w io.Writer = os.Stdout
@@ -39,10 +50,11 @@ func runReport(args []string) error {
 		w = f
 	}
 	if err := analysis.WriteReport(w, sessions, analysis.ReportOptions{
-		Title:      *title,
-		TopN:       *topN,
-		Clusters:   *clusters,
-		Transcript: *transcript,
+		Title:       *title,
+		TopN:        *topN,
+		Clusters:    *clusters,
+		Transcript:  *transcript,
+		Attribution: attribution,
 	}); err != nil {
 		return err
 	}
