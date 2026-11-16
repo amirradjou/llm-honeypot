@@ -94,7 +94,10 @@ func TestExpansion(t *testing.T) {
 		{`echo $?`, []string{"echo", "0"}},
 		{`echo $$`, []string{"echo", "742"}},
 		{`echo ${HOME}/bin`, []string{"echo", "/root/bin"}},
-		{`echo ${VAR:-default}`, []string{"echo"}}, // name VAR unset -> empty (we don't do :- yet, name stripped)
+		{`echo ${VAR:-default}`, []string{"echo", "default"}},
+		{`echo ${VAR:-two words}`, []string{"echo", "two", "words"}},
+		{`echo "${VAR:-two words}"`, []string{"echo", "two words"}},
+		{`echo ${#USER} ${HOME#/} ${PATH%%:*}`, []string{"echo", "4", "root", "/usr/bin"}},
 		{`cat ~/notes`, []string{"cat", "/root/notes"}},
 		{`cat ~martin/.bashrc`, []string{"cat", "/home/martin/.bashrc"}},
 		{`cat ~nobody/x`, []string{"cat", "~nobody/x"}},

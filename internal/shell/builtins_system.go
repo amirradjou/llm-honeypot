@@ -906,37 +906,11 @@ func cmdBusybox(c *Context) int {
 	return 127
 }
 
-// cmdShellC handles `sh -c "..."` / `bash -c "..."`; without -c it accepts
-// a script file argument or does nothing (a nested interactive shell just
-// returns to the same session).
-func cmdShellC(c *Context) int {
-	args := c.Args[1:]
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-c" && i+1 < len(args):
-			return c.Interp.run(c.Sess, args[i+1], c.Stdin, c.Stdout, c.Stderr)
-		case strings.HasPrefix(a, "-"):
-			// -x, -e, etc.: ignore
-		default:
-			// Treat as a script path: read and run each line.
-			data, err := c.readTarget(a)
-			if err != nil {
-				c.Errorf("%s: %s", a, "No such file or directory")
-				return 127
-			}
-			status := 0
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
-					continue
-				}
-				status = c.Interp.run(c.Sess, line, c.Stdin, c.Stdout, c.Stderr)
-			}
-			return status
-		}
-	}
-	return 0
-}
+// cmdShellC handles sh / bash / dash: `-c "..."`, a script file, or
+// commands piped on stdin, each in a child shell (see runChildShell). With
+// none of those it does nothing: a nested interactive shell just returns
+// to the same session.
+func cmdShellC(c *Context) int { return runChildShell(c) }
 
 func cmdPrintf(c *Context) int {
 	if len(c.Args) < 2 {

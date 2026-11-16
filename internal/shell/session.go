@@ -2,8 +2,10 @@ package shell
 
 import (
 	"io/fs"
+	"maps"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/amirradjou/llm-honeypot/internal/machine"
 	"github.com/amirradjou/llm-honeypot/internal/vfs"
@@ -29,10 +31,28 @@ type Session struct {
 	Cols, Rows int
 	// Rand seeds any per-session randomness (fake pids, etc.).
 	Rand *rand.Rand
-	// LoginAt is used by `last`, `w`, uptime-of-session, etc.
+	// Interactive marks an interactive login shell (a PTY session): $0 is
+	// -bash, errors read "-bash: ...", a syntax error does not echo the
+	// line and expansion errors abandon the line instead of exiting. Exec
+	// and piped sessions leave it false and get bash -c's wording
+	// ("bash: line 1: ...").
+	Interactive bool
+
+	// prevPID is $!, the last background job's fake pid.
 	prevPID int
 	// elevated notes a `sudo -i`/`sudo -s` in this session (cosmetic).
 	elevated bool
+
+	started time.Time
+	funcs   map[string]*funcDecl
+	hashed  map[string]string // bash's command hash table, for type/hash
+	ulimits map[string]string // values set with ulimit
+	jobs    int               // background jobs started (for "[1] 1234")
+	lines   int               // lines read by non-interactive runs ("line N")
+	// active is the shell currently running a line for this session, so
+	// builtins that re-enter the interpreter (sudo, nohup, timeout) share
+	// its limits and wording.
+	active *shell
 }
 
 // NewSession builds a session for user on a fresh clone of m's filesystem.
@@ -61,6 +81,7 @@ func NewSession(m *machine.Machine, user string, seed int64) *Session {
 		Umask:   0o022,
 		PID:     10000 + r.Intn(22000),
 		Rand:    r,
+		started: m.Now(),
 	}
 	if s.FS.Exists(home) {
 		s.Cwd = home
@@ -117,46 +138,31 @@ func (s *Session) tildeCwd() string {
 // abs resolves p against the session's cwd.
 func (s *Session) abs(p string) string { return vfs.Resolve(s.Cwd, p) }
 
-// --- Expander, backed by the session environment ---
-
-type sessionExpander struct {
-	s      *Session
-	extra  map[string]string // per-command assignments, if any
-	status int
+// fork copies the session for a subshell: cwd, variables, functions and
+// the rest are the child's own from here on; the filesystem is shared, as
+// in bash.
+func (s *Session) fork() *Session {
+	c := *s
+	c.Env = maps.Clone(s.Env)
+	c.funcs = maps.Clone(s.funcs)
+	c.hashed = maps.Clone(s.hashed)
+	c.ulimits = maps.Clone(s.ulimits)
+	c.History = s.History[:len(s.History):len(s.History)]
+	return &c
 }
 
-func (e sessionExpander) Var(name string) (string, bool) {
-	switch name {
-	case "?":
-		return itoa(e.status), true
-	case "$":
-		return itoa(e.s.PID), true
-	case "!":
-		return itoa(e.s.prevPID), true
-	case "#":
-		return "0", true
-	case "*", "@":
-		return "", true
-	case "-":
-		return "himBHs", true
+// nextPID hands out a fake pid for a background job.
+func (s *Session) nextPID() int {
+	if s.prevPID < s.PID {
+		s.prevPID = s.PID
 	}
-	if e.extra != nil {
-		if v, ok := e.extra[name]; ok {
-			return v, true
-		}
-	}
-	v, ok := e.s.Env[name]
-	return v, ok
+	s.prevPID += 1 + s.Rand.Intn(40)
+	return s.prevPID
 }
 
-func (e sessionExpander) Home(user string) (string, bool) {
-	if user == "" {
-		if h := e.s.Env["HOME"]; h != "" {
-			return h, true
-		}
-		user = e.s.User
-	}
-	if u := e.s.Machine.Profile.User(user); u != nil {
+// homeOf returns user's home directory from the machine profile.
+func (s *Session) homeOf(user string) (string, bool) {
+	if u := s.Machine.Profile.User(user); u != nil {
 		return u.Home, true
 	}
 	return "", false

