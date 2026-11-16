@@ -119,7 +119,18 @@ func main() {
 	}
 
 	if *jsonOut != "" {
-		b, _ := json.MarshalIndent(results, "", "  ")
+		// Keep the saved results small enough to commit: the verdicts matter,
+		// not every byte a command printed.
+		saved := make([]result, len(results))
+		for i, r := range results {
+			r.Honeypot = clip(r.Honeypot)
+			if r.Reference != nil {
+				ref := clip(*r.Reference)
+				r.Reference = &ref
+			}
+			saved[i] = r
+		}
+		b, _ := json.MarshalIndent(saved, "", " ")
 		if err := os.WriteFile(*jsonOut, append(b, '\n'), 0o644); err != nil {
 			fatal(err)
 		}
@@ -315,6 +326,15 @@ func (c *capped) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+func clip(o outcome) outcome {
+	for _, s := range []*string{&o.Stdout, &o.Stderr} {
+		if r := []rune(*s); len(r) > 300 {
+			*s = string(r[:300]) + "…"
+		}
+	}
+	return o
 }
 
 func tally(rs []result) (match, total, giveaways int) {
