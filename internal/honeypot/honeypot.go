@@ -115,8 +115,13 @@ func (h *Handler) Session(ctx context.Context, s *sshd.Session) {
 		sess.Cols, sess.Rows = s.PTY.Cols, s.PTY.Rows
 		sess.Env["TERM"] = s.PTY.Term
 	}
-	sess.Env["SSH_CLIENT"] = addrString(s.Conn.RemoteAddr) + " 22"
-	sess.Env["SSH_CONNECTION"] = addrString(s.Conn.RemoteAddr) + " " + addrString(s.Conn.LocalAddr) + " 22"
+	// sshd's format is space-separated: "client-ip client-port server-port"
+	// and "client-ip client-port server-ip server-port". An "ip:port" here
+	// shows up in `echo $SSH_CLIENT` and in w's FROM column.
+	cip, cport := hostPort(s.Conn.RemoteAddr)
+	sip, _ := hostPort(s.Conn.LocalAddr)
+	sess.Env["SSH_CLIENT"] = cip + " " + cport + " 22"
+	sess.Env["SSH_CONNECTION"] = cip + " " + cport + " " + sip + " 22"
 
 	if sink != nil {
 		sink.Session(s.PTY != nil, termOf(s), s.Command)
@@ -282,6 +287,17 @@ func termOf(s *sshd.Session) string {
 		return s.PTY.Term
 	}
 	return ""
+}
+
+func hostPort(a net.Addr) (string, string) {
+	if a == nil {
+		return "0.0.0.0", "0"
+	}
+	host, port, err := net.SplitHostPort(a.String())
+	if err != nil {
+		return a.String(), "0"
+	}
+	return host, port
 }
 
 func addrString(a net.Addr) string {

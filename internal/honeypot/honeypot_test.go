@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -267,5 +268,44 @@ func TestInteractiveShellLooksLikeALoginShell(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
 		}
+	}
+}
+
+// The box keeps its own clock and sshd's environment format; the host's
+// timezone and an "ip:port" in SSH_CLIENT were both giveaways.
+func TestSessionEnvironmentAndBannerLookReal(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	if out := exec(t, c, "echo $SSH_CLIENT"); !regexp.MustCompile(`^127\.0\.0\.1 \d+ 22\n$`).MatchString(out) {
+		t.Errorf("SSH_CLIENT = %q", out)
+	}
+	if out := exec(t, c, "date +%Z"); out != "UTC\n" {
+		t.Errorf("date +%%Z = %q (the profile's timezone is Etc/UTC)", out)
+	}
+
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm", 24, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+	banner := out.String()
+	if !regexp.MustCompile(`System information as of \w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d UTC \d{4}\r\n`).MatchString(banner) {
+		t.Errorf("sysinfo line wrong:\n%s", banner)
+	}
+	if strings.Contains(banner, "\r\r\n") {
+		t.Errorf("banner has doubled carriage returns")
+	}
+	if !regexp.MustCompile(`Last login: .* from 10\.20\.30\.15\r\n`).MatchString(banner) {
+		t.Errorf("last login wrong:\n%s", banner)
 	}
 }

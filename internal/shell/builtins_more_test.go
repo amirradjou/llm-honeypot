@@ -3,6 +3,7 @@ package shell
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Expected outputs recorded from the Ubuntu 22.04 reference container.
@@ -63,5 +64,27 @@ func TestLsOnePerLineOffTerminal(t *testing.T) {
 	out, _, _ := run(t, in, s, "ls -d /etc/pass*")
 	if !strings.Contains(out, "/etc/passwd\n") || strings.Contains(out, "  ") {
 		t.Errorf("ls off terminal = %q", out)
+	}
+}
+
+// Expected strings are GNU date's output on the reference container for
+// the same instant.
+func TestStrftimeMatchesGNUDate(t *testing.T) {
+	at := time.Date(2026, 11, 16, 23, 34, 13, 440602446, time.UTC)
+	cases := []struct{ format, want string }{
+		{"%a %b %e %H:%M:%S %Z %Y", "Mon Nov 16 23:34:13 UTC 2026"},
+		{"%Y-%m-%d %H:%M:%S %Z %z %a %b %e %j %u %p %I %N %T %D %F %R %c",
+			"2026-11-16 23:34:13 UTC +0000 Mon Nov 16 320 1 PM 11 440602446 23:34:13 11/16/26 2026-11-16 23:34 Mon Nov 16 23:34:13 2026"},
+		{"%a, %d %b %Y %H:%M:%S %z", "Mon, 16 Nov 2026 23:34:13 +0000"},
+		{"%e", " 5"},
+	}
+	for i, c := range cases {
+		when := at
+		if i == len(cases)-1 {
+			when = at.AddDate(0, 0, -11) // the 5th: space-padded day
+		}
+		if got := strftime(c.format, when); got != c.want {
+			t.Errorf("strftime(%q) = %q, want %q", c.format, got, c.want)
+		}
 	}
 }

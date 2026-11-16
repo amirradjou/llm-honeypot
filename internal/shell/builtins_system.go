@@ -575,35 +575,209 @@ func cmdLsbRelease(c *Context) int {
 
 func cmdDate(c *Context) int {
 	now := c.Sess.Machine.Now()
+	format := "%a %b %e %H:%M:%S %Z %Y"
 	for i := 1; i < len(c.Args); i++ {
 		a := c.Args[i]
-		if strings.HasPrefix(a, "+") {
-			c.Print(strftime(a[1:], now) + "\n")
-			return 0
-		}
-		if a == "-u" {
+		switch {
+		case strings.HasPrefix(a, "+"):
+			format = a[1:]
+		case a == "-u" || a == "--utc" || a == "--universal":
 			now = now.UTC()
-		}
-		if a == "+%s" {
-			c.Printf("%d\n", now.Unix())
+		case a == "-R" || a == "--rfc-email":
+			format = "%a, %d %b %Y %H:%M:%S %z"
+		case a == "-I" || a == "--iso-8601" || a == "-Idate" || a == "--iso-8601=date":
+			format = "%Y-%m-%d"
+		case a == "-Iseconds" || a == "--iso-8601=seconds":
+			format = "%Y-%m-%dT%H:%M:%S%:z"
+		case a == "--version":
+			c.Print("date (GNU coreutils) 8.32\n")
 			return 0
+		case (a == "-d" || a == "--date") && i+1 < len(c.Args):
+			i++
+			if t, ok := parseDateArg(c.Args[i], now); ok {
+				now = t
+			} else {
+				fmt.Fprintf(c.Stderr, "date: invalid date '%s'\n", c.Args[i])
+				return 1
+			}
+		case a == "-s" || a == "--set":
+			fmt.Fprint(c.Stderr, "date: cannot set date: Operation not permitted\n")
+			return 1
 		}
 	}
-	c.Print(now.Format("Mon Jan  2 15:04:05 MST 2006") + "\n")
+	c.Print(strftime(format, now) + "\n")
 	return 0
 }
 
-// strftime handles the handful of %-codes scripts actually use.
+// parseDateArg understands the -d forms scripts use: @epoch, now,
+// yesterday, tomorrow and "N unit(s) ago".
+func parseDateArg(s string, now time.Time) (time.Time, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	switch s {
+	case "now", "today", "":
+		return now, true
+	case "yesterday":
+		return now.AddDate(0, 0, -1), true
+	case "tomorrow":
+		return now.AddDate(0, 0, 1), true
+	}
+	if strings.HasPrefix(s, "@") {
+		n, err := strconv.ParseInt(s[1:], 10, 64)
+		return time.Unix(n, 0).In(now.Location()), err == nil
+	}
+	f := strings.Fields(s)
+	if len(f) >= 2 {
+		n, err := strconv.Atoi(f[0])
+		if err != nil {
+			return now, false
+		}
+		if len(f) == 3 && f[2] == "ago" {
+			n = -n
+		}
+		switch strings.TrimSuffix(f[1], "s") {
+		case "second", "sec":
+			return now.Add(time.Duration(n) * time.Second), true
+		case "minute", "min":
+			return now.Add(time.Duration(n) * time.Minute), true
+		case "hour":
+			return now.Add(time.Duration(n) * time.Hour), true
+		case "day":
+			return now.AddDate(0, 0, n), true
+		case "week":
+			return now.AddDate(0, 0, 7*n), true
+		case "month":
+			return now.AddDate(0, n, 0), true
+		case "year":
+			return now.AddDate(n, 0, 0), true
+		}
+	}
+	return now, false
+}
+
+// strftime implements GNU date's conversion specifications.
 func strftime(f string, t time.Time) string {
-	rep := strings.NewReplacer(
-		"%Y", t.Format("2006"), "%m", t.Format("01"), "%d", t.Format("02"),
-		"%H", t.Format("15"), "%M", t.Format("04"), "%S", t.Format("05"),
-		"%F", t.Format("2006-01-02"), "%T", t.Format("15:04:05"),
-		"%s", strconv.FormatInt(t.Unix(), 10), "%y", t.Format("06"),
-		"%b", t.Format("Jan"), "%a", t.Format("Mon"), "%j", fmt.Sprintf("%03d", t.YearDay()),
-		"%%", "%",
-	)
-	return rep.Replace(f)
+	var b strings.Builder
+	for i := 0; i < len(f); i++ {
+		if f[i] != '%' || i+1 >= len(f) {
+			b.WriteByte(f[i])
+			continue
+		}
+		i++
+		noPad := false
+		if f[i] == '-' && i+1 < len(f) {
+			noPad = true
+			i++
+		}
+		num := func(n, width int, pad byte) string {
+			if noPad {
+				return strconv.Itoa(n)
+			}
+			s := strconv.Itoa(n)
+			for len(s) < width {
+				s = string(pad) + s
+			}
+			return s
+		}
+		hour12 := t.Hour() % 12
+		if hour12 == 0 {
+			hour12 = 12
+		}
+		_, week := t.ISOWeek()
+		switch f[i] {
+		case 'a':
+			b.WriteString(t.Format("Mon"))
+		case 'A':
+			b.WriteString(t.Format("Monday"))
+		case 'b', 'h':
+			b.WriteString(t.Format("Jan"))
+		case 'B':
+			b.WriteString(t.Format("January"))
+		case 'c':
+			b.WriteString(strftime("%a %b %e %H:%M:%S %Y", t))
+		case 'C':
+			b.WriteString(num(t.Year()/100, 2, '0'))
+		case 'd':
+			b.WriteString(num(t.Day(), 2, '0'))
+		case 'D':
+			b.WriteString(strftime("%m/%d/%y", t))
+		case 'e':
+			b.WriteString(num(t.Day(), 2, ' '))
+		case 'F':
+			b.WriteString(strftime("%Y-%m-%d", t))
+		case 'G':
+			y, _ := t.ISOWeek()
+			b.WriteString(strconv.Itoa(y))
+		case 'H':
+			b.WriteString(num(t.Hour(), 2, '0'))
+		case 'I':
+			b.WriteString(num(hour12, 2, '0'))
+		case 'j':
+			b.WriteString(num(t.YearDay(), 3, '0'))
+		case 'k':
+			b.WriteString(num(t.Hour(), 2, ' '))
+		case 'l':
+			b.WriteString(num(hour12, 2, ' '))
+		case 'm':
+			b.WriteString(num(int(t.Month()), 2, '0'))
+		case 'M':
+			b.WriteString(num(t.Minute(), 2, '0'))
+		case 'n':
+			b.WriteByte('\n')
+		case 'N':
+			b.WriteString(fmt.Sprintf("%09d", t.Nanosecond()))
+		case 'p':
+			b.WriteString(t.Format("PM"))
+		case 'P':
+			b.WriteString(strings.ToLower(t.Format("PM")))
+		case 'r':
+			b.WriteString(strftime("%I:%M:%S %p", t))
+		case 'R':
+			b.WriteString(strftime("%H:%M", t))
+		case 's':
+			b.WriteString(strconv.FormatInt(t.Unix(), 10))
+		case 'S':
+			b.WriteString(num(t.Second(), 2, '0'))
+		case 't':
+			b.WriteByte('\t')
+		case 'T':
+			b.WriteString(strftime("%H:%M:%S", t))
+		case 'u':
+			wd := int(t.Weekday())
+			if wd == 0 {
+				wd = 7
+			}
+			b.WriteString(strconv.Itoa(wd))
+		case 'V':
+			b.WriteString(num(week, 2, '0'))
+		case 'w':
+			b.WriteString(strconv.Itoa(int(t.Weekday())))
+		case 'x':
+			b.WriteString(strftime("%m/%d/%y", t))
+		case 'X':
+			b.WriteString(strftime("%H:%M:%S", t))
+		case 'y':
+			b.WriteString(num(t.Year()%100, 2, '0'))
+		case 'Y':
+			b.WriteString(strconv.Itoa(t.Year()))
+		case 'z':
+			b.WriteString(t.Format("-0700"))
+		case ':':
+			if i+1 < len(f) && f[i+1] == 'z' {
+				i++
+				b.WriteString(t.Format("-07:00"))
+			} else {
+				b.WriteString("%:")
+			}
+		case 'Z':
+			b.WriteString(t.Format("MST"))
+		case '%':
+			b.WriteByte('%')
+		default:
+			b.WriteByte('%')
+			b.WriteByte(f[i])
+		}
+	}
+	return b.String()
 }
 
 func cmdSleep(c *Context) int {

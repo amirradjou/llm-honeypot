@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"math"
 	"time"
+	_ "time/tzdata" // the distroless image has no zoneinfo
 
 	"github.com/amirradjou/llm-honeypot/internal/profile"
 	"github.com/amirradjou/llm-honeypot/internal/vfs"
@@ -33,6 +34,14 @@ func New(p *profile.Profile, now func() time.Time) (*Machine, error) {
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("machine: %w", err)
 	}
+	// The box keeps its own timezone; the host's must not leak into
+	// date, the login banner or wget's log lines.
+	loc, err := time.LoadLocation(p.Timezone)
+	if err != nil || p.Timezone == "" {
+		loc = time.UTC
+	}
+	hostNow := now
+	now = func() time.Time { return hostNow().In(loc) }
 	m := &Machine{Profile: p, Now: now, BootTime: now().Add(-p.BootedAgo)}
 	m.FS = vfs.New()
 	m.FS.Now = now
