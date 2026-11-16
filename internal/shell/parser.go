@@ -6,7 +6,10 @@
 // real; commands are Go functions over the virtual machine.
 package shell
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // Redirect is one I/O redirection in the static view returned by Parse.
 type Redirect struct {
@@ -62,6 +65,25 @@ func Parse(line string, exp Expander) (*AndOr, error) {
 	f := &flattener{x: &expander{env: staticEnv{exp}}, ao: ao}
 	f.list(l, true)
 	return ao, nil
+}
+
+// Incomplete reports whether src stops in the middle of a command: an
+// open quote, an unfinished if/for/while/case/{ }/( ), a trailing | or &&,
+// a trailing backslash, or a here-document still waiting for its
+// delimiter. An interactive session should then print PS2 ("> "), read
+// another line and run the lines joined with "\n", as bash does.
+func Incomplete(src string) bool {
+	trailing := len(src) - len(strings.TrimRight(src, `\`))
+	if trailing%2 == 1 {
+		return true
+	}
+	p := newParser(src)
+	_, err := p.parseProgram()
+	var se *syntaxError
+	if errors.As(err, &se) && (se.eof || se.eofMatch != "") {
+		return true
+	}
+	return err == nil && len(p.warnings) > 0
 }
 
 // parseProgram parses all of the source.

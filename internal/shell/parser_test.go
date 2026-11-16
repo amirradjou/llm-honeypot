@@ -335,6 +335,22 @@ b`}
 	}
 }
 
+func TestIncomplete(t *testing.T) {
+	more := []string{`if true; then`, `for i in 1 2`, `echo "abc`, `echo 'x`, `ls |`, `true &&`, `{ echo a`,
+		`echo $(date`, `cat <<EOF`, "cat <<EOF\nline", `echo a\`, `case x in`}
+	for _, line := range more {
+		if !Incomplete(line) {
+			t.Errorf("Incomplete(%q) = false", line)
+		}
+	}
+	done := []string{``, `echo hi`, `if true; then echo; fi`, `echo a; fi`, `echo a )`, "cat <<EOF\nx\nEOF", `echo a\\`}
+	for _, line := range done {
+		if Incomplete(line) {
+			t.Errorf("Incomplete(%q) = true", line)
+		}
+	}
+}
+
 func TestRedirectionOperators(t *testing.T) {
 	ao, err := Parse(`cmd 2>&1 >&2 1>&2 &>>log 3<in <<<word >|f`, exp())
 	if err != nil {
