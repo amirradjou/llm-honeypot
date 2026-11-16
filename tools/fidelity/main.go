@@ -69,6 +69,8 @@ func main() {
 		jsonOut  = flag.String("json", "", "also write every result as JSON here")
 		label    = flag.String("label", "", "a note about this run, printed in the report header")
 		parallel = flag.Int("parallel", 6, "lines run at once")
+		baseline = flag.String("baseline", "", "JSON results of an earlier run, for before/after columns")
+		svgOut   = flag.String("svg", "", "with -baseline: also draw the before/after chart here")
 		timeout  = flag.Duration("timeout", 20*time.Second, "per-line time limit on each side")
 	)
 	flag.Parse()
@@ -100,7 +102,21 @@ func main() {
 		defer f.Close()
 		w = f
 	}
-	report(w, results, *label)
+	var before []result
+	if *baseline != "" {
+		if before, err = loadResults(*baseline); err != nil {
+			fatal(err)
+		}
+	}
+	report(w, results, before, *label)
+	if *svgOut != "" && before != nil {
+		f, err := os.Create(*svgOut)
+		if err != nil {
+			fatal(err)
+		}
+		writeChart(f, scores(results, before))
+		f.Close()
+	}
 
 	if *jsonOut != "" {
 		b, _ := json.MarshalIndent(results, "", "  ")
@@ -314,7 +330,7 @@ func tally(rs []result) (match, total, giveaways int) {
 	return
 }
 
-func report(w io.Writer, rs []result, label string) {
+func report(w io.Writer, rs, before []result, label string) {
 	match, total, give := tally(rs)
 	fmt.Fprintf(w, "# Fidelity check\n\n")
 	fmt.Fprintf(w, "Bot-style command lines from [`tools/fidelity/corpus.txt`](../tools/fidelity/corpus.txt), "+
@@ -331,26 +347,16 @@ func report(w io.Writer, rs []result, label string) {
 	fmt.Fprintf(w, "A giveaway is an answer no stock server gives: `command not found` for a tool Ubuntu ships, "+
 		"a syntax error on valid bash, binary garbage on the terminal.\n\n")
 
-	fmt.Fprintf(w, "| Group | Lines | Match |\n|---|---:|---:|\n")
-	var families []string
-	seen := map[string]bool{}
-	for _, r := range rs {
-		if !seen[r.Family] {
-			seen[r.Family] = true
-			families = append(families, r.Family)
+	if before != nil {
+		fmt.Fprintf(w, "| Group | Lines | Before | Now |\n|---|---:|---:|---:|\n")
+		for _, g := range scores(rs, before) {
+			fmt.Fprintf(w, "| %s | %d | %d | %d |\n", g.name, g.total, g.before, g.after)
 		}
-	}
-	for _, f := range families {
-		n, m := 0, 0
-		for _, r := range rs {
-			if r.Family == f {
-				n++
-				if r.Match {
-					m++
-				}
-			}
+	} else {
+		fmt.Fprintf(w, "| Group | Lines | Match |\n|---|---:|---:|\n")
+		for _, g := range scores(rs, nil)[1:] {
+			fmt.Fprintf(w, "| %s | %d | %d |\n", g.name, g.total, g.after)
 		}
-		fmt.Fprintf(w, "| %s | %d | %d |\n", f, n, m)
 	}
 
 	var bad []result
