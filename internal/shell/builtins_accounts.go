@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"fmt"
 	"io"
 	"strings"
 )
@@ -59,8 +60,9 @@ func cmdPasswd(c *Context) int {
 	// A real passwd prompts; over an automated session there is no tty
 	// dialogue, so we behave like passwd fed from a pipe: consume stdin
 	// and report success.
+	// passwd talks on stderr: the prompts and the verdict both go there.
 	io.Copy(io.Discard, c.Stdin)
-	c.Printf("passwd: password updated successfully\n")
+	fmt.Fprint(c.Stderr, "New password: Retype new password: passwd: password updated successfully\n")
 	return 0
 }
 
