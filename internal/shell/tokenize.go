@@ -298,9 +298,11 @@ func stripBraceOps(s string) string {
 	return s
 }
 
+// expandTilde reads a tilde-prefix: the user name after "~" runs to the first
+// slash or to the end of the word, so "cd ~; pwd" is two commands, as in bash.
 func expandTilde(rs []rune, i int, exp Expander) (string, int) {
 	j := i + 1
-	for j < len(rs) && rs[j] != '/' && rs[j] != ' ' && rs[j] != '\t' {
+	for j < len(rs) && rs[j] != '/' && !strings.ContainsRune(" \t\n;&|<>()", rs[j]) {
 		j++
 	}
 	user := string(rs[i+1 : j])

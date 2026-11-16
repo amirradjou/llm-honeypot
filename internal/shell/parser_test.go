@@ -98,12 +98,53 @@ func TestExpansion(t *testing.T) {
 		{`cat ~/notes`, []string{"cat", "/root/notes"}},
 		{`cat ~martin/.bashrc`, []string{"cat", "/home/martin/.bashrc"}},
 		{`cat ~nobody/x`, []string{"cat", "~nobody/x"}},
+		{`cat ~`, []string{"cat", "/root"}},
 		{`echo $(whoami)`, []string{"echo"}}, // command substitution yields empty
 		{`echo pre$(id)post`, []string{"echo", "prepost"}},
 	}
 	for _, c := range cases {
 		if got := argv(t, c.line); !eq(got, c.want) {
 			t.Errorf("argv(%q) = %q, want %q", c.line, got, c.want)
+		}
+	}
+}
+
+// A tilde ends at the end of its word, so the operators after it still split
+// the line: bots send "cd ~; mkdir -p .ssh" all the time, and bash runs it as two
+// commands.
+func TestTildeEndsAtTheEndOfItsWord(t *testing.T) {
+	cases := []struct {
+		line string
+		want [][]string // each pipeline's commands' args
+	}{
+		{`cd ~; pwd`, [][]string{{"cd", "/root"}, {"pwd"}}},
+		{`cd ~&& pwd`, [][]string{{"cd", "/root"}, {"pwd"}}},
+		{`cd ~||true`, [][]string{{"cd", "/root"}, {"true"}}},
+		{`echo ~|cat`, [][]string{{"echo", "/root", "|", "cat"}}},
+	}
+	for _, c := range cases {
+		ao, err := Parse(c.line, exp())
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", c.line, err)
+		}
+		var got [][]string
+		for _, pl := range ao.Pipelines {
+			var words []string
+			for k, cmd := range pl.Cmds {
+				if k > 0 {
+					words = append(words, "|")
+				}
+				words = append(words, cmd.Args...)
+			}
+			got = append(got, words)
+		}
+		if len(got) != len(c.want) {
+			t.Fatalf("Parse(%q) = %q, want %q", c.line, got, c.want)
+		}
+		for k := range got {
+			if !eq(got[k], c.want[k]) {
+				t.Errorf("Parse(%q) = %q, want %q", c.line, got, c.want)
+			}
 		}
 	}
 }
