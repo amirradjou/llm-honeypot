@@ -33,9 +33,24 @@ func loginBanner(m *machine.Machine, sess *shell.Session) string {
 	memUsedPct := 33
 	swapUsedPct := 0
 	fmt.Fprintf(&b, "  System information as of %s\n\n", now.Format("Mon Jan _2 15:04:05 MST 2006"))
-	fmt.Fprintf(&b, "  System load:  %.2f              Processes:             %d\n", l1, len(p.Processes)+2)
-	fmt.Fprintf(&b, "  Usage of /:   %d%% of %.2fGB    Users logged in:       1\n", diskUsed, diskTotalGB)
-	fmt.Fprintf(&b, "  Memory usage: %d%%                IPv4 address for %s: %s\n", memUsedPct, p.Interface, p.IPv4)
+	// landscape-sysinfo pads the left column so the right one lines up.
+	left := []string{
+		fmt.Sprintf("System load:  %.2f", l1),
+		fmt.Sprintf("Usage of /:   %.1f%% of %.2fGB", float64(diskUsed), diskTotalGB),
+		fmt.Sprintf("Memory usage: %d%%", memUsedPct),
+	}
+	right := []string{
+		fmt.Sprintf("Processes:             %d", len(p.Processes)+2),
+		"Users logged in:       1",
+		fmt.Sprintf("IPv4 address for %s: %s", p.Interface, p.IPv4),
+	}
+	width := 0
+	for _, l := range left {
+		width = max(width, len(l))
+	}
+	for i := range left {
+		fmt.Fprintf(&b, "  %-*s   %s\n", width, left[i], right[i])
+	}
 	fmt.Fprintf(&b, "  Swap usage:   %d%%\n\n", swapUsedPct)
 	_ = usedGB
 	_ = l5
