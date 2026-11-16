@@ -11,7 +11,7 @@ import (
 	"github.com/amirradjou/llm-honeypot/internal/profile"
 )
 
-func testSession(t *testing.T) (*Interp, *Session) {
+func testSession(t testing.TB) (*Interp, *Session) {
 	t.Helper()
 	fixed := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	m, err := machine.New(profile.Default(), func() time.Time { return fixed })
