@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -175,4 +176,26 @@ func contains(ss []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// A real sshd keeps a command's stderr on the channel's extended-data
+// stream; `ssh host cmd 2>/dev/null` relies on it.
+func TestExecKeepsStderrApart(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	var stdout, stderr strings.Builder
+	sess.Stdout, sess.Stderr = &stdout, &stderr
+	err = sess.Run("echo out; ls /nonexistent")
+	var ee *ssh.ExitError
+	if !errors.As(err, &ee) || ee.ExitStatus() != 2 {
+		t.Errorf("exit = %v", err)
+	}
+	if stdout.String() != "out\n" || !strings.Contains(stderr.String(), "No such file or directory") {
+		t.Errorf("stdout %q, stderr %q", stdout.String(), stderr.String())
+	}
 }

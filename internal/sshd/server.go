@@ -46,7 +46,7 @@ type Config struct {
 func Defaults() Config {
 	return Config{
 		Addr:          ":2222",
-		ServerVersion: "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.11",
+		ServerVersion: "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
 		AuthDelay:     400 * time.Millisecond,
 		AcceptAfter:   1,
 		MaxAuthTries:  6,

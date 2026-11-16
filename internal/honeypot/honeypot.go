@@ -128,7 +128,7 @@ func (h *Handler) Session(ctx context.Context, s *sshd.Session) {
 
 // runExec runs a single `ssh host "command"`.
 func (h *Handler) runExec(sess *shell.Session, s *sshd.Session, sink *recorder.Sink) {
-	code := h.runLine(sess, s.Command, s, s, sink)
+	code := h.runLine(sess, s.Command, s, s.Stderr(), sink)
 	s.Exit(code)
 }
 
@@ -142,7 +142,7 @@ func (h *Handler) runPiped(sess *shell.Session, s *sshd.Session, sink *recorder.
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		code = h.runLine(sess, line, s, s, sink)
+		code = h.runLine(sess, line, s, s.Stderr(), sink)
 	}
 	s.Exit(code)
 }

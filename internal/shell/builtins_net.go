@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"net"
 	"path"
 	"strings"
 )
@@ -73,18 +74,32 @@ func cmdWget(c *Context) int {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "-O" && i+1 < len(args):
-			output = args[i+1]
-			i++
-		case strings.HasPrefix(a, "-O"):
-			output = a[2:]
-		case a == "-q" || a == "--quiet":
+		case a == "--quiet":
 			quiet = true
-		case a == "-P" && i+1 < len(args):
-			output = path.Join(args[i+1], "")
-			i++
-		case a == "--no-check-certificate" || a == "-c" || a == "--no-check-cert" || strings.HasPrefix(a, "--"):
-		case strings.HasPrefix(a, "-"):
+		case strings.HasPrefix(a, "--output-document="):
+			output = strings.TrimPrefix(a, "--output-document=")
+		case strings.HasPrefix(a, "--directory-prefix="):
+			output = strings.TrimPrefix(a, "--directory-prefix=") + "/"
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			// Bundled short options: -q, -O FILE, -qO-, -P DIR, -c, -N ...
+			for k := 1; k < len(a); k++ {
+				switch a[k] {
+				case 'q':
+					quiet = true
+				case 'O', 'P':
+					val := a[k+1:]
+					if val == "" && i+1 < len(args) {
+						val = args[i+1]
+						i++
+					}
+					if a[k] == 'P' {
+						val += "/"
+					}
+					output = val
+					k = len(a)
+				}
+			}
 		default:
 			if url == "" {
 				url = a
@@ -92,26 +107,47 @@ func cmdWget(c *Context) int {
 		}
 	}
 	if url == "" {
-		c.Print("wget: missing URL\n")
+		fmt.Fprint(c.Stderr, "wget: missing URL\nUsage: wget [OPTION]... [URL]...\n\nTry `wget --help' for more options.\n")
 		return 1
 	}
+	toStdout := output == "-"
 	saveAs := output
-	if saveAs == "" || strings.HasSuffix(saveAs, "/") {
+	if toStdout {
+		saveAs = ""
+	} else if saveAs == "" || strings.HasSuffix(saveAs, "/") {
 		saveAs = path.Join(strings.TrimSuffix(output, "/"), urlBasename(url))
 	}
 	host := hostOf(url)
-	ip := fakeResolve(host)
 	size := int64(24_000 + seedInode(url)%180_000)
 	if !quiet {
+		// wget logs to stderr; only the document itself goes to stdout.
+		e := c.Stderr
 		now := c.Sess.Machine.Now().Format("2006-01-02 15:04:05")
-		c.Printf("--%s--  %s\n", now, url)
-		c.Printf("Resolving %s (%s)... %s\n", host, host, ip)
-		c.Printf("Connecting to %s (%s)|%s|:%s... connected.\n", host, host, ip, portFor(url))
-		c.Print("HTTP request sent, awaiting response... 200 OK\n")
-		c.Printf("Length: %d (%s) [application/octet-stream]\n", size, humanSize(size, true))
-		c.Printf("Saving to: '%s'\n\n", saveAs)
-		c.Printf("%-28s 100%%[===================>] %s  --.-KB/s    in 0.1s\n\n", path.Base(saveAs), humanSize(size, true))
-		c.Printf("%s (2.13 MB/s) - '%s' saved [%d/%d]\n\n", now, saveAs, size, size)
+		fmt.Fprintf(e, "--%s--  %s\n", now, url)
+		if net.ParseIP(host) != nil {
+			fmt.Fprintf(e, "Connecting to %s:%s... connected.\n", host, portFor(url))
+		} else {
+			ip := fakeResolve(host)
+			fmt.Fprintf(e, "Resolving %s (%s)... %s\n", host, host, ip)
+			fmt.Fprintf(e, "Connecting to %s (%s)|%s|:%s... connected.\n", host, host, ip, portFor(url))
+		}
+		fmt.Fprint(e, "HTTP request sent, awaiting response... 200 OK\n")
+		fmt.Fprintf(e, "Length: %d (%s) [application/octet-stream]\n", size, humanSize(size, true))
+		if toStdout {
+			fmt.Fprint(e, "Saving to: 'STDOUT'\n\n")
+		} else {
+			fmt.Fprintf(e, "Saving to: '%s'\n\n", saveAs)
+		}
+		name := path.Base(saveAs)
+		if toStdout {
+			name = "-"
+		}
+		fmt.Fprintf(e, "%-28s 100%%[===================>] %s  --.-KB/s    in 0.1s\n\n", name, humanSize(size, true))
+		if toStdout {
+			fmt.Fprintf(e, "%s (2.13 MB/s) - written to stdout [%d/%d]\n\n", now, size, size)
+		} else {
+			fmt.Fprintf(e, "%s (2.13 MB/s) - '%s' saved [%d/%d]\n\n", now, saveAs, size, size)
+		}
 	}
 	c.recordDownload("wget", url, "GET", saveAs)
 	return 0
@@ -149,7 +185,7 @@ func cmdCurl(c *Context) int {
 		}
 	}
 	if url == "" {
-		c.Print("curl: try 'curl --help' for more information\n")
+		fmt.Fprint(c.Stderr, "curl: try 'curl --help' or 'curl --manual' for more information\n")
 		return 2
 	}
 	saveAs := ""
@@ -170,11 +206,14 @@ func cmdCurl(c *Context) int {
 		return 0
 	}
 	c.recordDownload("curl", url, method, saveAs)
-	if !toFile && !silent {
-		// Piping to a shell (curl ... | sh) is the classic; emit a short
-		// shell-looking payload so the pipe has something, but never run it.
-		c.Print("#!/bin/sh\n# (content not retrieved by honeypot)\n")
+	if toFile && !silent {
+		size := 24_000 + seedInode(url)%180_000
+		fmt.Fprintf(c.Stderr, "  %% Total    %% Received %% Xferd  Average Speed   Time    Time     Time  Current\n"+
+			"                                 Dload  Upload   Total   Spent    Left  Speed\n"+
+			"100 %5d  100 %5d    0     0   %4dk      0 --:--:-- --:--:-- --:--:--  %4dk\n", size, size, 180+size%90, 181+size%90)
 	}
+	// The body is never fetched, so there is nothing to print: an empty
+	// response is what `curl ... | sh` then hands the shell.
 	return 0
 }
 

@@ -56,8 +56,10 @@ func (m *Machine) seedProc(b *builder) {
 	b.placeholder("/proc/net/route", 384, "/proc/net/route with a default route via "+p.Gateway+" on "+p.Interface, 0o444, 0, 0, ageBoot)
 	b.placeholder("/proc/net/arp", 240, "/proc/net/arp with the gateway "+p.Gateway, 0o444, 0, 0, ageBoot)
 	b.placeholder("/proc/stat", 1200, "/proc/stat for a "+fmt.Sprint(p.CPUCores)+"-core mostly idle box up for "+m.Uptime().Round(1e9).String(), 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/self/status", 1300, "/proc/self/status of a bash process", 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/1/status", 1300, "/proc/1/status of systemd", 0o444, 0, 0, ageBoot)
+	// Real files, not model placeholders: bots grep TracerPid here to spot
+	// a debugger, and an empty answer is its own giveaway.
+	b.file("/proc/self/status", procStatus("cat", "R (running)", 4189, 4122, 8456, 980, p.CPUCores), 0o444, 0, 0, ageBoot)
+	b.file("/proc/1/status", procStatus("systemd", "S (sleeping)", 1, 0, 167584, 11912, p.CPUCores), 0o444, 0, 0, ageBoot)
 	b.file("/proc/1/cmdline", "/sbin/init\x00", 0o444, 0, 0, ageBoot)
 	b.link("/", "/proc/1/root", ageBoot)
 	b.link("/usr/lib/systemd/systemd", "/proc/1/exe", ageBoot)
@@ -137,4 +139,67 @@ func meminfoFor(memMB, swapMB int) string {
 		fmt.Fprintf(&sb, "%-15s %8d%s\n", r.k+":", r.v, unit)
 	}
 	return sb.String()
+}
+
+// procStatus renders /proc/<pid>/status the way a 5.15 kernel does.
+func procStatus(name, state string, pid, ppid, vmKB, rssKB, cpus int) string {
+	mask := (1 << cpus) - 1
+	return fmt.Sprintf(`Name:	%s
+Umask:	0022
+State:	%s
+Tgid:	%d
+Ngid:	0
+Pid:	%d
+PPid:	%d
+TracerPid:	0
+Uid:	0	0	0	0
+Gid:	0	0	0	0
+FDSize:	256
+Groups:	0 
+NStgid:	%d
+NSpid:	%d
+NSpgid:	%d
+NSsid:	%d
+VmPeak:	%8d kB
+VmSize:	%8d kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	%8d kB
+VmRSS:	%8d kB
+RssAnon:	%8d kB
+RssFile:	%8d kB
+RssShmem:	       0 kB
+VmData:	     360 kB
+VmStk:	     132 kB
+VmExe:	      16 kB
+VmLib:	    1748 kB
+VmPTE:	      52 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+Threads:	1
+SigQ:	0/15541
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000000000
+SigCgt:	0000000000000000
+CapInh:	0000000000000000
+CapPrm:	000001ffffffffff
+CapEff:	000001ffffffffff
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	%x
+Cpus_allowed_list:	0-%d
+Mems_allowed:	00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	0
+nonvoluntary_ctxt_switches:	1
+`, name, state, pid, pid, ppid, pid, pid, pid, max(ppid, 1), vmKB, vmKB, rssKB, rssKB, rssKB/11, rssKB-rssKB/11, mask, cpus-1)
 }
