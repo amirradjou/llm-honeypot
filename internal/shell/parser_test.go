@@ -94,7 +94,10 @@ func TestExpansion(t *testing.T) {
 		{`echo $?`, []string{"echo", "0"}},
 		{`echo $$`, []string{"echo", "742"}},
 		{`echo ${HOME}/bin`, []string{"echo", "/root/bin"}},
-		{`echo ${VAR:-default}`, []string{"echo"}}, // name VAR unset -> empty (we don't do :- yet, name stripped)
+		{`echo ${VAR:-default}`, []string{"echo", "default"}},
+		{`echo ${VAR:-two words}`, []string{"echo", "two", "words"}},
+		{`echo "${VAR:-two words}"`, []string{"echo", "two words"}},
+		{`echo ${#USER} ${HOME#/} ${PATH%%:*}`, []string{"echo", "4", "root", "/usr/bin"}},
 		{`cat ~/notes`, []string{"cat", "/root/notes"}},
 		{`cat ~martin/.bashrc`, []string{"cat", "/home/martin/.bashrc"}},
 		{`cat ~nobody/x`, []string{"cat", "~nobody/x"}},
@@ -262,5 +265,143 @@ func TestRealMiraiStyleLine(t *testing.T) {
 	}
 	if !found {
 		t.Error("wget URL not preserved")
+	}
+}
+
+// The static view lists the commands inside compound commands and
+// functions too, so the report counts what a loop or function would run.
+func TestParseFlattensCompoundCommands(t *testing.T) {
+	cases := []struct {
+		line string
+		want []string
+	}{
+		{`for i in 1 2; do echo $i; done`, []string{"echo"}},
+		{`if [ -d /tmp ]; then cd /tmp; else cd /var/tmp; fi`, []string{"[ -d /tmp ]", "cd /tmp", "cd /var/tmp"}},
+		{`while read l; do echo $l; done < /etc/passwd`, []string{"read l", "echo"}},
+		{`{ echo a; echo b; } | wc -l`, []string{"echo a", "echo b", "wc -l"}},
+		{`f() { wget http://a/x; }; f`, []string{"wget http://a/x", "f"}},
+		{`case $x in a) id;; *) uname;; esac`, []string{"id", "uname"}},
+		{`echo $((2+3)) {a,b}`, []string{"echo 5 a b"}},
+	}
+	for _, c := range cases {
+		ao, err := Parse(c.line, exp())
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", c.line, err)
+		}
+		var got []string
+		for _, pl := range ao.Pipelines {
+			for _, cmd := range pl.Cmds {
+				if len(cmd.Args) > 0 {
+					got = append(got, strings.Join(cmd.Args, " "))
+				}
+			}
+		}
+		if !eq(got, c.want) {
+			t.Errorf("Parse(%q) = %q, want %q", c.line, got, c.want)
+		}
+	}
+}
+
+func TestParseCompoundSyntaxErrors(t *testing.T) {
+	bad := map[string]string{
+		`if true; then echo a`:         "syntax error: unexpected end of file",
+		`echo a; fi`:                   "syntax error near unexpected token `fi'",
+		`for i in 1 2; echo $i; done`:  "syntax error near unexpected token `echo'",
+		`{ echo a }`:                   "syntax error: unexpected end of file",
+		`echo $(echo a`:                "unexpected EOF while looking for matching `)'",
+		"echo `echo a":                 "unexpected EOF while looking for matching ``'",
+		`echo ${x`:                     "unexpected EOF while looking for matching `}'",
+		`case x in a) echo;; `:         "syntax error: unexpected end of file",
+		`echo a )`:                     "syntax error near unexpected token `)'",
+		`f() echo hi`:                  "syntax error near unexpected token `echo'",
+		`while true do echo; done`:     "syntax error near unexpected token `done'",
+		`if; then fi`:                  "syntax error near unexpected token `;'",
+		strings.Repeat("(", 500) + "x": "syntax error near unexpected token `('",
+	}
+	for line, want := range bad {
+		_, err := Parse(line, exp())
+		if err == nil || err.Error() != want {
+			t.Errorf("Parse(%.40q) error = %v, want %q", line, err, want)
+		}
+	}
+	good := []string{"if true\nthen\n  echo a\nfi", "for i in a b\ndo echo $i\ndone", "f() {\n  echo hi\n}\nf",
+		`x=$( case y in y) echo z;; esac )`, `[[ -f /etc/passwd && ! -d /etc/passwd ]]`, `(( i++ ))`,
+		"cat <<EOF\n$HOME\nEOF", `echo a\
+b`}
+	for _, line := range good {
+		if _, err := Parse(line, exp()); err != nil {
+			t.Errorf("Parse(%q) should be ok: %v", line, err)
+		}
+	}
+}
+
+func TestIncomplete(t *testing.T) {
+	more := []string{`if true; then`, `for i in 1 2`, `echo "abc`, `echo 'x`, `ls |`, `true &&`, `{ echo a`,
+		`echo $(date`, `cat <<EOF`, "cat <<EOF\nline", `echo a\`, `case x in`}
+	for _, line := range more {
+		if !Incomplete(line) {
+			t.Errorf("Incomplete(%q) = false", line)
+		}
+	}
+	done := []string{``, `echo hi`, `if true; then echo; fi`, `echo a; fi`, `echo a )`, "cat <<EOF\nx\nEOF", `echo a\\`}
+	for _, line := range done {
+		if Incomplete(line) {
+			t.Errorf("Incomplete(%q) = true", line)
+		}
+	}
+}
+
+func TestRedirectionOperators(t *testing.T) {
+	ao, err := Parse(`cmd 2>&1 >&2 1>&2 &>>log 3<in <<<word >|f`, exp())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Redirect{{"2>&", "1"}, {">&", "2"}, {">&", "2"}, {"&>>", "log"}, {"3<", "in"}, {"<<<", "word"}, {">|", "f"}}
+	got := ao.Pipelines[0].Cmds[0].Redirects
+	if len(got) != len(want) {
+		t.Fatalf("redirects = %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("redirect %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestBraceExpansion(t *testing.T) {
+	cases := map[string]string{
+		`a{b,c}d`:     "abd acd",
+		`{1..3}`:      "1 2 3",
+		`{3..1}`:      "3 2 1",
+		`{01..10..3}`: "01 04 07 10",
+		`{a..e..2}`:   "a c e",
+		`{x,y{1,2}}`:  "x y1 y2",
+		`{a}`:         "{a}",
+		`'{a,b}'`:     "'{a,b}'",
+		`${x}{a,b}`:   "${x}a ${x}b",
+		`{a,b`:        "{a,b",
+	}
+	for in, want := range cases {
+		budget := maxBraceWords
+		if got := strings.Join(expandBraces(in, &budget), " "); got != want {
+			t.Errorf("expandBraces(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGlobMatch(t *testing.T) {
+	cases := []struct {
+		pat, name string
+		want      bool
+	}{
+		{"*", "abc", true}, {"a*c", "abc", true}, {"a*c", "abd", false}, {"?b?", "abc", true},
+		{"[a-c]x", "bx", true}, {"[!a-c]x", "bx", false}, {"[[:digit:]]*", "7z", true},
+		{`\*`, "*", true}, {`\*`, "a", false}, {"*.tar.gz", "x.tar.gz", true},
+		{"**********************************b", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+	}
+	for _, c := range cases {
+		if got := globMatch(c.pat, c.name); got != c.want {
+			t.Errorf("globMatch(%q, %q) = %v", c.pat, c.name, got)
+		}
 	}
 }
