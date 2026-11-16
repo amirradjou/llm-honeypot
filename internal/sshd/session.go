@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -56,6 +57,11 @@ func (s *Session) Read(p []byte) (int, error) {
 
 // Write sends output to the attacker.
 func (s *Session) Write(p []byte) (int, error) { return s.ch.Write(p) }
+
+// Stderr is the channel's extended-data stream. A real sshd keeps a
+// command's stderr apart from its stdout, and a bot that runs
+// `ssh host cmd 2>/dev/null` notices when the two arrive mixed.
+func (s *Session) Stderr() io.Writer { return s.ch.Stderr() }
 
 // Exit reports the command's exit status and closes the channel. It is
 // safe to call more than once.
