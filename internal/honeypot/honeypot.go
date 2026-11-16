@@ -149,7 +149,16 @@ func (h *Handler) runPiped(sess *shell.Session, s *sshd.Session, sink *recorder.
 
 // runInteractive drives a full-screen line-editing shell.
 func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *sshd.Session, sink *recorder.Sink) {
-	t := term.NewTerminal(s, sess.Prompt())
+	// Everything the terminal shows also goes to a replayable recording.
+	var cast *recorder.Cast
+	if sink != nil {
+		cast = sink.Cast(s.Index, sess.Cols, sess.Rows, termOf(s))
+	}
+	defer cast.Close()
+	t := term.NewTerminal(struct {
+		io.Reader
+		io.Writer
+	}{s, io.MultiWriter(s, cast)}, sess.Prompt())
 	// Ctrl-C cancels the current line instead of closing the session, the
 	// way a real shell does. Without this, x/term returns io.EOF for Ctrl-C
 	// and the attacker is logged straight out.
@@ -168,6 +177,7 @@ func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *ss
 		for ws := range s.Resize {
 			sess.Cols, sess.Rows = ws.Cols, ws.Rows
 			_ = t.SetSize(ws.Cols, ws.Rows)
+			cast.Resize(ws.Cols, ws.Rows)
 		}
 	}()
 

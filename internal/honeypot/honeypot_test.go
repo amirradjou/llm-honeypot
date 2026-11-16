@@ -199,3 +199,41 @@ func TestExecKeepsStderrApart(t *testing.T) {
 		t.Errorf("stdout %q, stderr %q", stdout.String(), stderr.String())
 	}
 }
+
+// An interactive session leaves an asciinema recording of what the
+// attacker saw.
+func TestInteractiveSessionIsRecordedAsCast(t *testing.T) {
+	addr, dataDir := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm-256color", 30, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "uname -n\r")
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+
+	var casts []string
+	deadline := time.Now().Add(3 * time.Second)
+	for len(casts) == 0 && time.Now().Before(deadline) {
+		casts, _ = filepath.Glob(filepath.Join(dataDir, "sessions", "*", "*.cast"))
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(casts) != 1 {
+		t.Fatalf("casts = %v", casts)
+	}
+	data, _ := os.ReadFile(casts[0])
+	text := string(data)
+	if !strings.Contains(text, `"width":100`) || !strings.Contains(text, "srv-web01") || !strings.Contains(text, "logout") {
+		t.Errorf("cast = %s", text)
+	}
+}
