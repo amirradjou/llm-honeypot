@@ -234,12 +234,14 @@ func cmdCommand(c *Context) int {
 	if !terse && !verbose {
 		return sh.dispatch(args, c.Env, c.fdTable(), false)
 	}
-	status := 0
+	status := 1 // bash succeeds if any name was found
 	for _, name := range args {
 		kind, where := sh.whatIs(name)
+		if kind != "" {
+			status = 0
+		}
 		switch {
 		case kind == "":
-			status = 1
 			if verbose {
 				c.shellErrorf("%s: not found", name)
 			}

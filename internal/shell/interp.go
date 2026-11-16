@@ -117,10 +117,19 @@ func (in *Interp) Run(s *Session, line string, stdin io.Reader, stdout, stderr i
 	sh := in.topShell(s)
 	sh.lim.tty = stdout
 	prev := s.active
+	// A builtin running a command line of its own (xargs) is still part of
+	// the line being run: it shares that line's limits, so recursion
+	// through it stays bounded, and a limit hit inside stops the whole line.
+	nested := prev != nil && prev.in == in
+	if nested {
+		sh.lim = prev.lim
+		sh.enter(false)
+		defer sh.leave()
+	}
 	s.active = sh
 	defer func() {
 		s.active = prev
-		if !s.Interactive {
+		if !s.Interactive && !nested {
 			s.lines += strings.Count(line, "\n") + 1
 		}
 		if r := recover(); r != nil {
@@ -133,6 +142,9 @@ func (in *Interp) Run(s *Session, line string, stdin io.Reader, stdout, stderr i
 					exited, exitCode = true, sig.code
 				}
 			case abortSignal:
+				if nested {
+					panic(r)
+				}
 				io.WriteString(stderr, sig.msg)
 				status = sig.code
 			default:

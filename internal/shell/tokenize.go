@@ -51,6 +51,13 @@ type syntaxError struct {
 	eofMatch  string // unterminated quote or bracket: "'", "\"", "`", ")", "}"
 	expecting string // dash: the keyword the parser was waiting for
 	line      int
+	dashLine  int // dash blames the last line, not the one after it
+}
+
+// heredocEOF records a here-document the input ended inside; bash warns.
+type heredocEOF struct {
+	line, start int
+	delim       string
 }
 
 func (e *syntaxError) Error() string {
@@ -92,6 +99,7 @@ type parser struct {
 	depth    int
 	heredocs []*redir // waiting for the next newline
 	closers  []string // keywords being waited for, innermost last (for dash)
+	warnings []heredocEOF
 }
 
 func newParser(src string) *parser { return &parser{src: src, line: 1} }
@@ -160,6 +168,7 @@ func (p *parser) lex0() *token {
 		// A here-document with no body before the end of input is empty.
 		for _, r := range p.heredocs {
 			r.body = &word{}
+			p.warnings = append(p.warnings, heredocEOF{line: p.line, start: r.line, delim: r.delim})
 		}
 		p.heredocs = nil
 		return &token{kind: tkEOF, line: p.eofLine()}

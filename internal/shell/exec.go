@@ -26,6 +26,7 @@ const (
 	maxCapture   = 1 << 20          // bytes kept from one command substitution
 	maxPipe      = 4 << 20          // bytes kept in one pipe
 	maxFileWrite = 16 << 20         // bytes redirected into files per line
+	maxMoved     = 64 << 20         // bytes through pipes, substitutions and files per line
 	maxLoopTime  = 10 * time.Second // wall time after which loops stop
 )
 
@@ -36,7 +37,17 @@ type limits struct {
 	cmds    int
 	depth   int
 	written int
+	moved   int
 	tty     io.Writer // the terminal, for /dev/tty
+}
+
+// move counts bytes going through a pipe, substitution or file. Past the
+// budget the line stops: past caps, more output only costs CPU.
+func (l *limits) move(n int) {
+	l.moved += n
+	if l.moved > maxMoved {
+		panic(abortSignal{code: 1})
+	}
 }
 
 // fatalSignal ends a non-interactive shell after an expansion error (an
@@ -126,6 +137,9 @@ func (sh *shell) syntaxFailed(e *syntaxError, src string, w io.Writer) {
 		if sh.srcName != "" {
 			where = sh.srcName
 		}
+		if e.dashLine > 0 {
+			line = sh.lineBase + e.dashLine
+		}
 		fmt.Fprintf(w, "%s: %d: Syntax error: %s\n", where, line, e.dashText())
 		return
 	}
@@ -183,6 +197,12 @@ func (sh *shell) runSource(src string, fds *fdTable) int {
 	status := sh.s.Status
 	for {
 		l, err := p.nextLine()
+		for _, w := range p.warnings {
+			sh.line = sh.lineBase + w.line
+			fmt.Fprintf(fds.out(2), "%swarning: here-document at line %d delimited by end-of-file (wanted `%s')\n",
+				sh.prefix(), sh.lineBase+w.start, w.delim)
+		}
+		p.warnings = nil
 		if err != nil {
 			var se *syntaxError
 			if errors.As(err, &se) {
@@ -271,7 +291,7 @@ func (sh *shell) execPipeline(pl *pipeline, fds *fdTable) int {
 		status = boolStatus(status != 0)
 	}
 	if pl.timed {
-		fmt.Fprint(fds.out(2), "\nreal\t0m0.003s\nuser\t0m0.001s\nsys\t0m0.001s\n")
+		fmt.Fprint(fds.out(2), "\nreal\t0m0.000s\nuser\t0m0.000s\nsys\t0m0.000s\n")
 	}
 	return status
 }
@@ -289,7 +309,7 @@ func (sh *shell) execMulti(pl *pipeline, fds *fdTable) int {
 		}
 		var buf *cappedBuffer
 		if !last {
-			buf = &cappedBuffer{max: maxPipe}
+			buf = &cappedBuffer{max: maxPipe, lim: sh.lim}
 			f.setWriter(1, buf)
 			if pl.amp[i] {
 				f.setWriter(2, buf)
@@ -939,14 +959,44 @@ func (sh *shell) remember(name string) {
 }
 
 // cmdSubst runs $(...) in a subshell and returns its output.
+// fileOnly returns the redirection of a $(< file) body, or nil.
+func fileOnly(body *list) *redir {
+	if len(body.items) != 1 || body.items[0].bg || len(body.items[0].pipes) != 1 {
+		return nil
+	}
+	pl := body.items[0].pipes[0]
+	if len(pl.cmds) != 1 || pl.bang {
+		return nil
+	}
+	c, ok := pl.cmds[0].(*simpleCmd)
+	if !ok || len(c.words) > 0 || len(c.assigns) > 0 || len(c.redirs) != 1 || c.redirs[0].op != "<" || c.redirs[0].fd > 0 {
+		return nil
+	}
+	return c.redirs[0]
+}
+
 func (sh *shell) cmdSubst(body *list, fds *fdTable) (string, int) {
 	sh.enter(false)
 	defer sh.leave()
 	sub := sh.subshell()
-	out := &cappedBuffer{max: maxCapture}
+	out := &cappedBuffer{max: maxCapture, lim: sh.lim}
 	f := *fds
 	f.setWriter(1, out)
-	st := sub.isolate(func() int { return sub.execList(body, &f) })
+	var st int
+	if r := fileOnly(body); r != nil {
+		// $(< file) is bash's shorthand for $(cat file).
+		st = sub.isolate(func() int {
+			nt, err := sub.applyRedirs([]*redir{r}, &f)
+			if err != nil {
+				return sub.redirFailed(err, fds.out(2))
+			}
+			_, _ = io.Copy(out, nt.in())
+			return 0
+		})
+	} else {
+		st = sub.isolate(func() int { return sub.execList(body, &f) })
+	}
+	sh.s.Status = st // $? right after $(...) is its status, as in `echo $(exit 6) $?`
 	b := out.buf.Bytes()
 	if bytes.IndexByte(b, 0) >= 0 {
 		fmt.Fprintf(fds.out(2), "%swarning: command substitution: ignored null byte in input\n", sh.prefix())
@@ -977,7 +1027,7 @@ func (sh *shell) flags() string {
 	case sh.interactive:
 		return "himBHs"
 	case sh.dash:
-		return "c"
+		return ""
 	case sh.srcName != "":
 		return "hB"
 	}

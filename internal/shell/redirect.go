@@ -70,6 +70,7 @@ type fileSink struct {
 func (w *fileSink) Write(p []byte) (int, error) {
 	n := len(p)
 	if w.lim != nil {
+		w.lim.move(len(p))
 		room := maxFileWrite - w.lim.written
 		if room <= 0 {
 			return n, nil
@@ -87,9 +88,13 @@ func (w *fileSink) Write(p []byte) (int, error) {
 type cappedBuffer struct {
 	buf bytes.Buffer
 	max int
+	lim *limits
 }
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if b.lim != nil {
+		b.lim.move(len(p))
+	}
 	if room := b.max - b.buf.Len(); room > 0 {
 		if len(p) > room {
 			b.buf.Write(p[:room])

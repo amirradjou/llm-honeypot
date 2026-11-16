@@ -137,7 +137,7 @@ func (p *parser) skipNewlines() {
 // unexpected panics with a syntax error naming t.
 func (p *parser) unexpected(t *token) {
 	if t.kind == tkEOF {
-		e := &syntaxError{eof: true, line: t.line}
+		e := &syntaxError{eof: true, line: t.line, dashLine: p.line}
 		if n := len(p.closers); n > 0 {
 			e.expecting = p.closers[n-1]
 		}
@@ -462,6 +462,7 @@ func (p *parser) readHeredocs() {
 	for _, r := range pending {
 		var body strings.Builder
 		startLine := p.line
+		closed := false
 		for p.pos < len(p.src) {
 			end := strings.IndexByte(p.src[p.pos:], '\n')
 			var ln string
@@ -477,10 +478,14 @@ func (p *parser) readHeredocs() {
 				ln = strings.TrimLeft(ln, "\t")
 			}
 			if ln == r.delim {
+				closed = true
 				break
 			}
 			body.WriteString(ln)
 			body.WriteByte('\n')
+		}
+		if !closed {
+			p.warnings = append(p.warnings, heredocEOF{line: p.line, start: r.line, delim: r.delim})
 		}
 		text := body.String()
 		if r.quoted {
