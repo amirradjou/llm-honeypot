@@ -126,6 +126,12 @@ func main() {
 			r.Honeypot = clip(r.Honeypot)
 			if r.Reference != nil {
 				ref := clip(*r.Reference)
+				// On "same" lines the reference output describes the machine
+				// the check ran on (kernel, CPU, memory, uptime). Only whether
+				// it was empty matters, so the text is not kept.
+				if r.Mode == modeSame {
+					ref.Stdout, ref.Stderr = hostOnly(ref.Stdout), hostOnly(ref.Stderr)
+				}
 				r.Reference = &ref
 			}
 			saved[i] = r
@@ -326,6 +332,13 @@ func (c *capped) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+func hostOnly(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "(not kept: depends on the host)"
 }
 
 func clip(o outcome) outcome {
