@@ -20,11 +20,14 @@ Ubuntu 22.04 container, and the answers are compared.
 
 ![Share of bot-style command lines answered like a real Ubuntu 22.04 server, before and now](docs/fidelity.svg)
 
-| | Before | Now |
+| Lines answered like Ubuntu 22.04 | Before | Now |
 |---|---:|---:|
-| [Development set](tools/fidelity/corpus.txt): lines answered like Ubuntu | 47 of 90 | **90 of 90** |
-| Giveaways (`command not found` for a stock tool, syntax errors on valid bash, garbage on screen) | 29 | **0** |
-| [Held-out set](tools/fidelity/holdout.txt), written afterwards and run once | | **59 of 65** |
+| [Development set](tools/fidelity/corpus.txt) | 47 / 90 | **90 / 90** |
+| [Held-out set](tools/fidelity/holdout.txt), first run | | **59 / 65** |
+| Giveaways in the development set | 29 | **0** |
+
+A giveaway is an answer no stock server gives: `command not found` for a tool
+Ubuntu ships, a syntax error on valid bash, binary garbage on the screen.
 
 The development set drove the fixes, so its 90 of 90 mostly shows what was
 fixed. The held-out set is the fairer number: 65 new lines, scored on their
