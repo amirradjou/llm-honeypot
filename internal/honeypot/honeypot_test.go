@@ -237,3 +237,35 @@ func TestInteractiveSessionIsRecordedAsCast(t *testing.T) {
 		t.Errorf("cast = %s", text)
 	}
 }
+
+// An interactive login shell says -bash, and an unfinished line continues
+// at bash's "> " prompt instead of failing with a syntax error.
+func TestInteractiveShellLooksLikeALoginShell(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm", 24, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "echo $0\r")
+	io.WriteString(stdin, "for i in 1 2; do\r")
+	io.WriteString(stdin, "echo item$i; done\r")
+	io.WriteString(stdin, "nosuchcmd\r")
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+	text := out.String()
+	for _, want := range []string{"-bash\r\n", "> ", "item1\r\nitem2", "-bash: nosuchcmd: command not found"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}

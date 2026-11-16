@@ -189,11 +189,11 @@ func (c *Context) printListing(fl lsFlags, names *idNames, base string, disp []s
 		}
 		return
 	}
-	// Short format: one per line for -1 or when piped; otherwise names
-	// separated by two spaces (columnisation is not worth emulating and
-	// bots do not care).
+	// Short format: one per line for -1 or whenever stdout is not the
+	// terminal (exec sessions, pipes, files); otherwise names separated by
+	// two spaces (columnisation is not worth emulating).
 	sep := "  "
-	if fl.one {
+	if fl.one || !c.stdoutIsTerminal() {
 		sep = "\n"
 	}
 	parts := make([]string, len(order))
@@ -348,4 +348,11 @@ func seedInode(s string) uint64 {
 		h *= 1099511628211
 	}
 	return h
+}
+
+// stdoutIsTerminal reports whether this command writes straight to the
+// attacker's terminal. Comparing interfaces is safe here: Terminal holds a
+// pointer, so a different dynamic type simply compares unequal.
+func (c *Context) stdoutIsTerminal() bool {
+	return c.Sess.Terminal != nil && c.Stdout == c.Sess.Terminal
 }

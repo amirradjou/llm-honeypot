@@ -74,6 +74,12 @@ func sessKey(sess *shell.Session) string { return sess.Getenv(connIDEnv) }
 
 const connIDEnv = "__CONN_ID"
 
+// Bounds on one multi-line command typed at the interactive prompt.
+const (
+	maxContinuations = 200
+	maxScript        = 64 << 10
+)
+
 // Connected opens a recording for the connection.
 func (h *Handler) Connected(c *sshd.Conn) {
 	sink := h.rec.Begin(c.ID, addrString(c.RemoteAddr), c.StartedAt)
@@ -181,6 +187,8 @@ func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *ss
 		}
 	}()
 
+	sess.Interactive = true
+	sess.Terminal = t
 	io.WriteString(t, loginBanner(h.machine, sess))
 
 	for {
@@ -200,7 +208,18 @@ func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *ss
 			s.Exit(sess.Status)
 			return
 		}
+		// An unfinished line (open quote, `for ... do` without `done`, a
+		// trailing pipe or backslash) gets bash's "> " prompt and continues.
+		for k := 0; shell.Incomplete(line) && k < maxContinuations && len(line) < maxScript; k++ {
+			t.SetPrompt("> ")
+			more, err := t.ReadLine()
+			if err != nil {
+				break
+			}
+			line += "\n" + more
+		}
 		if strings.TrimSpace(line) == "" {
+			t.SetPrompt(sess.Prompt())
 			continue
 		}
 		sess.History = append(sess.History, line)

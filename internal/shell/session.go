@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"io"
 	"io/fs"
 	"maps"
 	"math/rand"
@@ -37,6 +38,12 @@ type Session struct {
 	// and piped sessions leave it false and get bash -c's wording
 	// ("bash: line 1: ...").
 	Interactive bool
+
+	// Terminal is the writer that is the attacker's terminal in a PTY
+	// session (nil otherwise). Commands whose stdout is exactly this writer
+	// behave as if isatty(1) were true; anything piped or redirected does
+	// not, so `ls | cat` prints one name per line, as on a real box.
+	Terminal io.Writer
 
 	// prevPID is $!, the last background job's fake pid.
 	prevPID int
