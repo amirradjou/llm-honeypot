@@ -3,6 +3,7 @@ package shell
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"regexp"
 	"sort"
@@ -840,8 +841,32 @@ func cmdFind(c *Context) int {
 }
 
 func cmdStat(c *Context) int {
-	flags, files := splitFlags(c.Args[1:])
+	var format string
+	printf := false
+	var rest []string
+	args := c.Args[1:]
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case (a == "-c" || a == "--format" || a == "--printf") && i+1 < len(args):
+			format, printf = args[i+1], a == "--printf"
+			i++
+		case strings.HasPrefix(a, "--format="):
+			format = strings.TrimPrefix(a, "--format=")
+		case strings.HasPrefix(a, "--printf="):
+			format, printf = strings.TrimPrefix(a, "--printf="), true
+		case strings.HasPrefix(a, "-c") && len(a) > 2:
+			format = a[2:]
+		default:
+			rest = append(rest, a)
+		}
+	}
+	flags, files := splitFlags(rest)
 	terse := hasFlag(flags, "t")
+	if len(files) == 0 {
+		fmt.Fprint(c.Stderr, "stat: missing operand\nTry 'stat --help' for more information.\n")
+		return 1
+	}
 	names := newIDNames(c)
 	status := 0
 	for _, f := range files {
@@ -863,6 +888,15 @@ func cmdStat(c *Context) int {
 		case info.Size == 0:
 			kind = "regular empty file"
 		}
+		if format != "" {
+			out := statFormat(format, f, kind, info, names)
+			if printf {
+				c.Print(expandEscapes(out))
+			} else {
+				c.Print(out + "\n")
+			}
+			continue
+		}
 		if terse {
 			c.Printf("%s %d %o %d %d\n", f, info.Size, info.Mode.Perm(), info.UID, info.GID)
 			continue
@@ -875,6 +909,76 @@ func cmdStat(c *Context) int {
 		c.Printf("Access: %s\nModify: %s\nChange: %s\n Birth: -\n", t, t, t)
 	}
 	return status
+}
+
+// statFormat expands GNU stat's %-sequences for one file.
+func statFormat(format, name, kind string, info vfs.Info, names *idNames) string {
+	var b strings.Builder
+	t := info.ModTime
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' || i+1 >= len(format) {
+			b.WriteByte(format[i])
+			continue
+		}
+		i++
+		switch format[i] {
+		case 'a':
+			perm := uint32(info.Mode.Perm())
+			if info.Mode&fs.ModeSetuid != 0 {
+				perm |= 0o4000
+			}
+			if info.Mode&fs.ModeSetgid != 0 {
+				perm |= 0o2000
+			}
+			if info.Mode&fs.ModeSticky != 0 {
+				perm |= 0o1000
+			}
+			fmt.Fprintf(&b, "%o", perm)
+		case 'A':
+			b.WriteString(modeString(info.Mode))
+		case 'b':
+			fmt.Fprintf(&b, "%d", blocksFor(info.Size))
+		case 'B':
+			b.WriteString("512")
+		case 'd':
+			b.WriteString("64769")
+		case 'F':
+			b.WriteString(kind)
+		case 'g':
+			fmt.Fprintf(&b, "%d", info.GID)
+		case 'G':
+			b.WriteString(names.group(info.GID))
+		case 'h':
+			fmt.Fprintf(&b, "%d", nlinkFor(info))
+		case 'i':
+			fmt.Fprintf(&b, "%d", seedInode(name)%3000000+130000)
+		case 'n':
+			b.WriteString(name)
+		case 'N':
+			b.WriteString("'" + name + "'")
+		case 'o':
+			b.WriteString("4096")
+		case 's':
+			fmt.Fprintf(&b, "%d", info.Size)
+		case 'u':
+			fmt.Fprintf(&b, "%d", info.UID)
+		case 'U':
+			b.WriteString(names.user(info.UID))
+		case 'w':
+			b.WriteString("-")
+		case 'W':
+			b.WriteString("0")
+		case 'x', 'y', 'z':
+			b.WriteString(t.Format("2006-01-02 15:04:05.000000000 -0700"))
+		case 'X', 'Y', 'Z':
+			fmt.Fprintf(&b, "%d", t.Unix())
+		case '%':
+			b.WriteByte('%')
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return b.String()
 }
 
 func cmdDu(c *Context) int {
@@ -975,41 +1079,79 @@ func cmdRealpath(c *Context) int {
 
 func cmdCut(c *Context) int {
 	delim := "\t"
-	var fields string
+	outDelim := ""
+	var spec, mode string // mode is 'f', 'c' or 'b'
+	onlyDelimited := false
 	var files []string
 	args := c.Args[1:]
+	takeVal := func(i *int, a, flag string) string {
+		if a == flag && *i+1 < len(args) {
+			*i++
+			return args[*i]
+		}
+		return strings.TrimPrefix(a, flag)
+	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case strings.HasPrefix(a, "--output-delimiter="):
+			outDelim = strings.TrimPrefix(a, "--output-delimiter=")
+		case a == "-s" || a == "--only-delimited":
+			onlyDelimited = true
 		case strings.HasPrefix(a, "-d"):
-			if a == "-d" && i+1 < len(args) {
-				delim = args[i+1]
-				i++
-			} else {
-				delim = a[2:]
-			}
-		case strings.HasPrefix(a, "-f"):
-			if a == "-f" && i+1 < len(args) {
-				fields = args[i+1]
-				i++
-			} else {
-				fields = a[2:]
-			}
+			delim = takeVal(&i, a, "-d")
+		case strings.HasPrefix(a, "-f"), strings.HasPrefix(a, "-c"), strings.HasPrefix(a, "-b"):
+			mode = a[1:2]
+			spec = takeVal(&i, a, a[:2])
 		default:
 			files = append(files, a)
 		}
 	}
-	sel := parseFieldList(fields)
+	if mode == "" {
+		fmt.Fprint(c.Stderr, "cut: you must specify a list of bytes, characters, or fields\nTry 'cut --help' for more information.\n")
+		return 1
+	}
+	ranges, ok := parseCutRanges(spec)
+	if !ok {
+		fmt.Fprintf(c.Stderr, "cut: invalid field value '%s'\nTry 'cut --help' for more information.\n", spec)
+		return 1
+	}
+	if delim == "" {
+		delim = "\t"
+	}
+	delim = delim[:1]
+	if outDelim == "" && mode == "f" {
+		outDelim = delim
+	}
 	process := func(data []byte) {
-		for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
-			cols := strings.Split(line, delim)
+		text := string(data)
+		if text == "" {
+			return
+		}
+		for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+			if mode != "f" {
+				var b []byte
+				for k := 0; k < len(line); k++ {
+					if inCutRanges(ranges, k+1) {
+						b = append(b, line[k])
+					}
+				}
+				c.Print(string(b) + "\n")
+				continue
+			}
+			if !strings.Contains(line, delim) {
+				if !onlyDelimited {
+					c.Print(line + "\n")
+				}
+				continue
+			}
 			var out []string
-			for _, idx := range sel {
-				if idx >= 1 && idx <= len(cols) {
-					out = append(out, cols[idx-1])
+			for k, col := range strings.Split(line, delim) {
+				if inCutRanges(ranges, k+1) {
+					out = append(out, col)
 				}
 			}
-			c.Print(strings.Join(out, delim) + "\n")
+			c.Print(strings.Join(out, outDelim) + "\n")
 		}
 	}
 	if len(files) == 0 {
@@ -1017,31 +1159,58 @@ func cmdCut(c *Context) int {
 		process(data)
 		return 0
 	}
+	status := 0
 	for _, f := range files {
 		data, err := c.readTarget(f)
 		if err != nil {
-			c.Errorf("%s", err)
-			return 1
+			fmt.Fprintf(c.Stderr, "cut: %s: No such file or directory\n", f)
+			status = 1
+			continue
 		}
 		process(data)
 	}
-	return 0
+	return status
 }
 
-func parseFieldList(s string) []int {
-	var out []int
-	for _, part := range strings.Split(s, ",") {
-		if lo, hi, ok := strings.Cut(part, "-"); ok {
-			a, _ := strconv.Atoi(lo)
-			b, _ := strconv.Atoi(hi)
-			for i := a; i <= b && i > 0; i++ {
-				out = append(out, i)
+// cutRange is one piece of a cut LIST: N, N-M, N- or -M (hi 0 = open).
+type cutRange struct{ lo, hi int }
+
+func parseCutRanges(spec string) ([]cutRange, bool) {
+	var out []cutRange
+	for _, part := range strings.Split(spec, ",") {
+		lo, hi, isRange := strings.Cut(part, "-")
+		r := cutRange{}
+		var err error
+		if lo != "" {
+			if r.lo, err = strconv.Atoi(lo); err != nil || r.lo < 1 {
+				return nil, false
 			}
-		} else if n, err := strconv.Atoi(part); err == nil {
-			out = append(out, n)
+		} else {
+			r.lo = 1
+		}
+		switch {
+		case !isRange:
+			r.hi = r.lo
+		case hi != "":
+			if r.hi, err = strconv.Atoi(hi); err != nil || r.hi < r.lo {
+				return nil, false
+			}
+		}
+		if lo == "" && hi == "" {
+			return nil, false
+		}
+		out = append(out, r)
+	}
+	return out, len(out) > 0
+}
+
+func inCutRanges(rs []cutRange, n int) bool {
+	for _, r := range rs {
+		if n >= r.lo && (r.hi == 0 || n <= r.hi) {
+			return true
 		}
 	}
-	return out
+	return false
 }
 
 func cmdSort(c *Context) int {

@@ -24,6 +24,7 @@ func (in *Interp) registerProcTools() {
 	in.Register("chattr", cmdChattr)
 	in.Register("lsattr", cmdLsattr)
 	in.Register("file", cmdFile)
+	in.registerMore()
 }
 
 // procEntry is one process as pgrep/pidof see it.
