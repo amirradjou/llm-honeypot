@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -307,5 +309,52 @@ func TestSessionEnvironmentAndBannerLookReal(t *testing.T) {
 	}
 	if !regexp.MustCompile(`Last login: .* from 10\.20\.30\.15\r\n`).MatchString(banner) {
 		t.Errorf("last login wrong:\n%s", banner)
+	}
+}
+
+// A command that finishes at once must still reach the client with its
+// exit status: the exec request is answered before the command starts.
+func TestInstantExecNeverEndsInEOF(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 1500)
+	sem := make(chan struct{}, 40) // stay under the server's MaxConns
+	for i := 0; i < 1500; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			c, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
+				User: "root", Auth: []ssh.AuthMethod{ssh.Password("x")},
+				HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 10 * time.Second,
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer c.Close()
+			s, err := c.NewSession()
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer s.Close()
+			if out, err := s.Output("true"); err != nil || len(out) != 0 {
+				errs <- fmt.Errorf("true = %q, %v", out, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	n := 0
+	for err := range errs {
+		if n < 3 {
+			t.Error(err)
+		}
+		n++
+	}
+	if n > 0 {
+		t.Errorf("%d of 1500 sessions failed", n)
 	}
 }

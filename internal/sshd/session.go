@@ -150,7 +150,7 @@ func (s *Server) serveSession(ctx context.Context, conn *Conn, ch ssh.Channel, r
 }
 
 func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- WindowSize, run func()) {
-	ok := false
+	ok, start := false, false
 	switch req.Type {
 	case "pty-req":
 		var r ptyRequest
@@ -175,13 +175,13 @@ func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- Wi
 		}
 	case "shell":
 		ok = true
-		run()
+		start = true
 	case "exec":
 		var r execRequest
 		if err := ssh.Unmarshal(req.Payload, &r); err == nil {
 			sess.Command = r.Command
 			ok = true
-			run()
+			start = true
 		}
 	case "subsystem", "x11-req", "auth-agent-req@openssh.com":
 		// sftp, X11 and agent forwarding are refused, as they would be on a
@@ -192,6 +192,12 @@ func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- Wi
 	}
 	if req.WantReply {
 		_ = req.Reply(ok, nil)
+	}
+	// Start the command only after the reply: a command that finishes at
+	// once would otherwise send exit-status and close the channel before
+	// the client heard that its exec was accepted, and the client sees EOF.
+	if start {
+		run()
 	}
 }
 
