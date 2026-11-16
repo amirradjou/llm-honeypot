@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 392" width="880" height="392" role="img" aria-labelledby="t d">
+<title id="t">How llm-honeypot is built</title>
+<desc id="d">An SSH bot logs in to an accept-all SSH front door, which hands it a fake shell running over a private copy of a seeded Ubuntu 22.04 filesystem. An optional model answers only commands the shell does not emulate. A recorder writes events, a transcript and a screen replay for every connection, and the report and dashboard read them back. Nothing the attacker types is ever executed.</desc>
+<style>
+  .bg{fill:#fcfcfb}.box{fill:#ffffff;stroke:#d6d4cc;stroke-width:1.2}.opt{fill:#ffffff;stroke:#a8a69e;stroke-width:1.2;stroke-dasharray:5 4}
+  .ink{fill:#0b0b0b}.ink2{fill:#52514e}.arrow{stroke:#898781;stroke-width:1.6;fill:none}.dash{stroke-dasharray:5 4}
+  .head{fill:#898781}.note{fill:#eef4fc}.bar{fill:#2a78d6}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#1a1a19}.box{fill:#232321;stroke:#3d3d3a}.opt{fill:#232321;stroke:#5c5b57}
+    .ink{fill:#f0efec}.ink2{fill:#c3c2b7}.note{fill:#1d2733}.bar{fill:#3987e5}
+  }
+  text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  .t{font-size:14.5px;font-weight:600}.l{font-size:12.5px}
+</style>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="880" height="392" rx="12"/>
+
+<!-- row 1 -->
+<rect class="box" x="20" y="24" width="150" height="92" rx="9"/>
+<text class="ink t" x="36" y="54">SSH bot</text>
+<text class="ink2 l" x="36" y="76">ssh root@your-vps</text>
+<text class="ink2 l" x="36" y="96">any password</text>
+
+<rect class="box" x="204" y="24" width="190" height="92" rx="9"/>
+<text class="ink t" x="220" y="54">SSH front door</text>
+<text class="ink2 l" x="220" y="76">accepts the login</text>
+<text class="ink2 l" x="220" y="96">the banner 22.04 sends</text>
+
+<rect class="box" x="428" y="24" width="232" height="92" rx="9"/>
+<text class="ink t" x="444" y="54">Fake shell</text>
+<text class="ink2 l" x="444" y="76">bash parser, 190 commands</text>
+<text class="ink2 l" x="444" y="96">over its own copy of an Ubuntu box</text>
+
+<rect class="opt" x="694" y="24" width="166" height="92" rx="9"/>
+<text class="ink t" x="710" y="54">Model (optional)</text>
+<text class="ink2 l" x="710" y="76">only the long tail</text>
+<text class="ink2 l" x="710" y="96">Claude or Ollama</text>
+
+<path class="arrow" d="M170,70 L202,70" marker-end="url(#ah)"/>
+<path class="arrow" d="M394,70 L426,70" marker-end="url(#ah)"/>
+<path class="arrow dash" d="M660,70 L692,70" marker-end="url(#ah)"/>
+
+<!-- row 2 -->
+<rect class="box" x="300" y="180" width="250" height="92" rx="9"/>
+<text class="ink t" x="316" y="210">Recorder</text>
+<text class="ink2 l" x="316" y="232">events (.jsonl) and transcript (.log)</text>
+<text class="ink2 l" x="316" y="252">screen replay (.cast)</text>
+
+<rect class="box" x="594" y="180" width="266" height="92" rx="9"/>
+<text class="ink t" x="610" y="210">Report and dashboard</text>
+<text class="ink2 l" x="610" y="232">behaviour clusters, credentials,</text>
+<text class="ink2 l" x="610" y="252">payload hosts, countries</text>
+
+<path class="arrow" d="M299,116 L370,178" marker-end="url(#ah)"/>
+<path class="arrow" d="M544,116 L480,178" marker-end="url(#ah)"/>
+<path class="arrow" d="M550,226 L592,226" marker-end="url(#ah)"/>
+<text class="ink2 l" x="250" y="160">logins</text>
+<text class="ink2 l" x="520" y="160">every command</text>
+
+<!-- note -->
+<rect class="note" x="20" y="306" width="840" height="66" rx="9"/>
+<rect class="bar" x="20" y="306" width="4" height="66" rx="2"/>
+<text class="ink t" x="40" y="333">Nothing an attacker types is ever run.</text>
+<text class="ink2 l" x="40" y="355">No real shell and no network from the shell: wget and curl log the URL and leave a fake file; running it fails with "Exec format error".</text>
+</svg>
