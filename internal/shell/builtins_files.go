@@ -50,6 +50,8 @@ func (in *Interp) registerFiles() {
 	in.Register("md5sum", func(c *Context) int { return sumCmd(c, "md5") })
 	in.Register("sha1sum", func(c *Context) int { return sumCmd(c, "sha1") })
 	in.Register("sha256sum", func(c *Context) int { return sumCmd(c, "sha256") })
+	in.registerText()
+	in.registerProcTools()
 }
 
 // inputFiles returns the non-flag arguments; flags are the ones starting '-'.
@@ -504,31 +506,22 @@ func cmdWc(c *Context) int {
 		}
 		return lines, len(strings.Fields(string(data))), len(data)
 	}
-	format := func(l, w, ch int, name string) string {
-		var parts []string
-		if wantL {
-			parts = append(parts, fmt.Sprintf("%7d", l))
-		}
-		if wantW {
-			parts = append(parts, fmt.Sprintf("%7d", w))
-		}
-		if wantC {
-			parts = append(parts, fmt.Sprintf("%7d", ch))
-		}
-		s := strings.Join(parts, "")
-		if name != "" {
-			s += " " + name
-		}
-		return s + "\n"
+	type result struct {
+		l, w, ch int
+		name     string
 	}
+	var results []result
+	status := 0
+	// GNU wc pads every column to one width: 1 when a single count of a
+	// single input is printed, otherwise the digits of the total size of
+	// the regular files read, and at least 7 when stdin is among them.
+	width, total, stdin := 1, 0, false
 	if len(files) == 0 {
 		data, _ := io.ReadAll(c.Stdin)
 		l, w, ch := count(data)
-		c.Print(format(l, w, ch, ""))
-		return 0
+		results = append(results, result{l, w, ch, ""})
+		stdin = true
 	}
-	var tl, tw, tc int
-	status := 0
 	for _, f := range files {
 		data, err := c.readTarget(f)
 		if err != nil {
@@ -537,11 +530,45 @@ func cmdWc(c *Context) int {
 			continue
 		}
 		l, w, ch := count(data)
-		tl, tw, tc = tl+l, tw+w, tc+ch
-		c.Print(format(l, w, ch, f))
+		results = append(results, result{l, w, ch, f})
+		total += ch
 	}
 	if len(files) > 1 {
-		c.Print(format(tl, tw, tc, "total"))
+		var t result
+		for _, r := range results {
+			t.l, t.w, t.ch = t.l+r.l, t.w+r.w, t.ch+r.ch
+		}
+		t.name = "total"
+		results = append(results, t)
+	}
+	ncounts := 0
+	for _, b := range []bool{wantL, wantW, wantC} {
+		if b {
+			ncounts++
+		}
+	}
+	if !(ncounts == 1 && len(results) == 1) {
+		width = len(strconv.Itoa(total))
+		if stdin && width < 7 {
+			width = 7
+		}
+	}
+	for _, r := range results {
+		var parts []string
+		if wantL {
+			parts = append(parts, fmt.Sprintf("%*d", width, r.l))
+		}
+		if wantW {
+			parts = append(parts, fmt.Sprintf("%*d", width, r.w))
+		}
+		if wantC {
+			parts = append(parts, fmt.Sprintf("%*d", width, r.ch))
+		}
+		line := strings.Join(parts, " ")
+		if r.name != "" {
+			line += " " + r.name
+		}
+		c.Print(line + "\n")
 	}
 	return status
 }
@@ -551,7 +578,8 @@ func cmdGrep(c *Context) int {
 	var files []string
 	ignoreCase, invert, count, lineNum, recursive, fixed, wholeLine, quiet, listFiles := false, false, false, false, false, false, false, false, false
 	args := c.Args[1:]
-	if c.Args[0] == "fgrep" {
+	extended := path.Base(c.Args[0]) == "egrep"
+	if path.Base(c.Args[0]) == "fgrep" {
 		fixed = true
 	}
 	havePat := false
@@ -584,6 +612,9 @@ func cmdGrep(c *Context) int {
 				case 'l':
 					listFiles = true
 				case 'E':
+					extended = true
+				case 'G':
+					extended = false
 				}
 			}
 			continue
@@ -601,7 +632,10 @@ func cmdGrep(c *Context) int {
 
 	var re *regexp.Regexp
 	if !fixed {
-		expr := pattern
+		expr := gnuWordBounds(pattern)
+		if !extended {
+			expr = breToRE2(pattern)
+		}
 		if wholeLine {
 			expr = `\b(?:` + expr + `)\b`
 		}
@@ -1084,43 +1118,145 @@ func cmdUniq(c *Context) int {
 }
 
 func cmdTr(c *Context) int {
-	_, sets := splitFlags(c.Args[1:])
-	del := hasFlag(c.Args[1:], "d")
-	data, _ := io.ReadAll(c.Stdin)
-	s := string(data)
-	if del && len(sets) >= 1 {
-		s = strings.Map(func(r rune) rune {
-			if strings.ContainsRune(expandTrSet(sets[0]), r) {
-				return -1
-			}
-			return r
-		}, s)
-	} else if len(sets) >= 2 {
-		from, to := expandTrSet(sets[0]), expandTrSet(sets[1])
-		s = strings.Map(func(r rune) rune {
-			if idx := strings.IndexRune(from, r); idx >= 0 {
-				if idx < len(to) {
-					return rune(to[idx])
+	del, squeeze, complement := false, false, false
+	var sets []string
+	for _, a := range c.Args[1:] {
+		if strings.HasPrefix(a, "-") && len(a) > 1 && len(sets) == 0 {
+			for _, r := range a[1:] {
+				switch r {
+				case 'd':
+					del = true
+				case 's':
+					squeeze = true
+				case 'c', 'C':
+					complement = true
 				}
-				return rune(to[len(to)-1])
 			}
-			return r
-		}, s)
+			continue
+		}
+		sets = append(sets, a)
 	}
-	c.Print(s)
+	if len(sets) == 0 || (!del && !squeeze && len(sets) < 2) {
+		if len(sets) == 0 {
+			fmt.Fprint(c.Stderr, "tr: missing operand\nTry 'tr --help' for more information.\n")
+		} else {
+			fmt.Fprintf(c.Stderr, "tr: missing operand after %s\nTwo strings must be given when translating.\nTry 'tr --help' for more information.\n", shellQuoteJoin(sets[:1]))
+		}
+		return 1
+	}
+	data, _ := io.ReadAll(c.Stdin)
+	set1 := expandTrSet(sets[0])
+	in1 := func(b byte) bool { return strings.IndexByte(set1, b) >= 0 != complement }
+	var out []byte
+	switch {
+	case del:
+		for _, b := range data {
+			if !in1(b) {
+				out = append(out, b)
+			}
+		}
+		if squeeze && len(sets) > 1 {
+			out = squeezeBytes(out, expandTrSet(sets[1]))
+		}
+	case len(sets) >= 2:
+		set2 := expandTrSet(sets[1])
+		for _, b := range data {
+			idx := strings.IndexByte(set1, b)
+			switch {
+			case complement && idx < 0 && set2 != "":
+				out = append(out, set2[len(set2)-1])
+			case !complement && idx >= 0 && set2 != "":
+				out = append(out, set2[min(idx, len(set2)-1)])
+			default:
+				out = append(out, b)
+			}
+		}
+		if squeeze {
+			out = squeezeBytes(out, set2)
+		}
+	default: // -s with one set
+		out = squeezeBytes(data, set1)
+	}
+	c.Stdout.Write(out)
 	return 0
 }
 
-func expandTrSet(s string) string {
-	switch s {
-	case "[:upper:]", "A-Z":
-		return "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	case "[:lower:]", "a-z":
-		return "abcdefghijklmnopqrstuvwxyz"
-	case "[:digit:]", "0-9":
-		return "0123456789"
+func squeezeBytes(data []byte, set string) []byte {
+	var out []byte
+	for i, b := range data {
+		if i > 0 && b == data[i-1] && strings.IndexByte(set, b) >= 0 {
+			continue
+		}
+		out = append(out, b)
 	}
-	return s
+	return out
+}
+
+// expandTrSet expands a tr SET: backslash escapes, a-z ranges and
+// [:class:] names, as bytes.
+func expandTrSet(s string) string {
+	classes := map[string]string{
+		"[:upper:]":  "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		"[:lower:]":  "abcdefghijklmnopqrstuvwxyz",
+		"[:digit:]":  "0123456789",
+		"[:space:]":  " \t\n\v\f\r",
+		"[:blank:]":  " \t",
+		"[:alpha:]":  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+		"[:alnum:]":  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+		"[:punct:]":  "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
+		"[:xdigit:]": "0123456789ABCDEFabcdef",
+	}
+	var raw []byte
+	for i := 0; i < len(s); i++ {
+		if s[i] == '[' {
+			if j := strings.Index(s[i:], ":]"); j > 0 {
+				if cls, ok := classes[s[i:i+j+2]]; ok {
+					raw = append(raw, cls...)
+					i += j + 1
+					continue
+				}
+			}
+		}
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+			switch s[i] {
+			case 'n':
+				raw = append(raw, '\n')
+			case 't':
+				raw = append(raw, '\t')
+			case 'r':
+				raw = append(raw, '\r')
+			case 'v':
+				raw = append(raw, '\v')
+			case 'f':
+				raw = append(raw, '\f')
+			case '0', '1', '2', '3', '4', '5', '6', '7':
+				j := i
+				for j < len(s) && j < i+3 && s[j] >= '0' && s[j] <= '7' {
+					j++
+				}
+				n, _ := strconv.ParseUint(s[i:j], 8, 8)
+				raw = append(raw, byte(n))
+				i = j - 1
+			default:
+				raw = append(raw, s[i])
+			}
+			continue
+		}
+		raw = append(raw, s[i])
+	}
+	var out []byte
+	for i := 0; i < len(raw); i++ {
+		if i+2 < len(raw) && raw[i+1] == '-' && raw[i] <= raw[i+2] {
+			for b := int(raw[i]); b <= int(raw[i+2]); b++ {
+				out = append(out, byte(b))
+			}
+			i += 2
+			continue
+		}
+		out = append(out, raw[i])
+	}
+	return string(out)
 }
 
 func cmdTee(c *Context) int {
