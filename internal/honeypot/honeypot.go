@@ -74,6 +74,12 @@ func sessKey(sess *shell.Session) string { return sess.Getenv(connIDEnv) }
 
 const connIDEnv = "__CONN_ID"
 
+// Bounds on one multi-line command typed at the interactive prompt.
+const (
+	maxContinuations = 200
+	maxScript        = 64 << 10
+)
+
 // Connected opens a recording for the connection.
 func (h *Handler) Connected(c *sshd.Conn) {
 	sink := h.rec.Begin(c.ID, addrString(c.RemoteAddr), c.StartedAt)
@@ -109,8 +115,13 @@ func (h *Handler) Session(ctx context.Context, s *sshd.Session) {
 		sess.Cols, sess.Rows = s.PTY.Cols, s.PTY.Rows
 		sess.Env["TERM"] = s.PTY.Term
 	}
-	sess.Env["SSH_CLIENT"] = addrString(s.Conn.RemoteAddr) + " 22"
-	sess.Env["SSH_CONNECTION"] = addrString(s.Conn.RemoteAddr) + " " + addrString(s.Conn.LocalAddr) + " 22"
+	// sshd's format is space-separated: "client-ip client-port server-port"
+	// and "client-ip client-port server-ip server-port". An "ip:port" here
+	// shows up in `echo $SSH_CLIENT` and in w's FROM column.
+	cip, cport := hostPort(s.Conn.RemoteAddr)
+	sip, _ := hostPort(s.Conn.LocalAddr)
+	sess.Env["SSH_CLIENT"] = cip + " " + cport + " 22"
+	sess.Env["SSH_CONNECTION"] = cip + " " + cport + " " + sip + " 22"
 
 	if sink != nil {
 		sink.Session(s.PTY != nil, termOf(s), s.Command)
@@ -128,7 +139,7 @@ func (h *Handler) Session(ctx context.Context, s *sshd.Session) {
 
 // runExec runs a single `ssh host "command"`.
 func (h *Handler) runExec(sess *shell.Session, s *sshd.Session, sink *recorder.Sink) {
-	code := h.runLine(sess, s.Command, s, s, sink)
+	code := h.runLine(sess, s.Command, s, s.Stderr(), sink)
 	s.Exit(code)
 }
 
@@ -142,14 +153,23 @@ func (h *Handler) runPiped(sess *shell.Session, s *sshd.Session, sink *recorder.
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		code = h.runLine(sess, line, s, s, sink)
+		code = h.runLine(sess, line, s, s.Stderr(), sink)
 	}
 	s.Exit(code)
 }
 
 // runInteractive drives a full-screen line-editing shell.
 func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *sshd.Session, sink *recorder.Sink) {
-	t := term.NewTerminal(s, sess.Prompt())
+	// Everything the terminal shows also goes to a replayable recording.
+	var cast *recorder.Cast
+	if sink != nil {
+		cast = sink.Cast(s.Index, sess.Cols, sess.Rows, termOf(s))
+	}
+	defer cast.Close()
+	t := term.NewTerminal(struct {
+		io.Reader
+		io.Writer
+	}{s, io.MultiWriter(s, cast)}, sess.Prompt())
 	// Ctrl-C cancels the current line instead of closing the session, the
 	// way a real shell does. Without this, x/term returns io.EOF for Ctrl-C
 	// and the attacker is logged straight out.
@@ -168,9 +188,12 @@ func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *ss
 		for ws := range s.Resize {
 			sess.Cols, sess.Rows = ws.Cols, ws.Rows
 			_ = t.SetSize(ws.Cols, ws.Rows)
+			cast.Resize(ws.Cols, ws.Rows)
 		}
 	}()
 
+	sess.Interactive = true
+	sess.Terminal = t
 	io.WriteString(t, loginBanner(h.machine, sess))
 
 	for {
@@ -190,7 +213,18 @@ func (h *Handler) runInteractive(ctx context.Context, sess *shell.Session, s *ss
 			s.Exit(sess.Status)
 			return
 		}
+		// An unfinished line (open quote, `for ... do` without `done`, a
+		// trailing pipe or backslash) gets bash's "> " prompt and continues.
+		for k := 0; shell.Incomplete(line) && k < maxContinuations && len(line) < maxScript; k++ {
+			t.SetPrompt("> ")
+			more, err := t.ReadLine()
+			if err != nil {
+				break
+			}
+			line += "\n" + more
+		}
 		if strings.TrimSpace(line) == "" {
+			t.SetPrompt(sess.Prompt())
 			continue
 		}
 		sess.History = append(sess.History, line)
@@ -253,6 +287,17 @@ func termOf(s *sshd.Session) string {
 		return s.PTY.Term
 	}
 	return ""
+}
+
+func hostPort(a net.Addr) (string, string) {
+	if a == nil {
+		return "0.0.0.0", "0"
+	}
+	host, port, err := net.SplitHostPort(a.String())
+	if err != nil {
+		return a.String(), "0"
+	}
+	return host, port
 }
 
 func addrString(a net.Addr) string {

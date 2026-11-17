@@ -14,6 +14,7 @@ func Default() *Profile {
 		OSPretty:      "Ubuntu 22.04.4 LTS",
 		Kernel:        "5.15.0-113-generic",
 		KernelVersion: "#123-Ubuntu SMP Fri May 24 09:35:29 UTC 2024",
+		SSHVersion:    "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
 		Arch:          "x86_64",
 		CPUModel:      "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz",
 		CPUCores:      2,

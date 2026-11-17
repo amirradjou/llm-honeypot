@@ -2,12 +2,14 @@ package shell
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/amirradjou/llm-honeypot/internal/profile"
+	"github.com/amirradjou/llm-honeypot/internal/vfs"
 )
 
 func (in *Interp) registerSystem() {
@@ -573,35 +575,209 @@ func cmdLsbRelease(c *Context) int {
 
 func cmdDate(c *Context) int {
 	now := c.Sess.Machine.Now()
+	format := "%a %b %e %H:%M:%S %Z %Y"
 	for i := 1; i < len(c.Args); i++ {
 		a := c.Args[i]
-		if strings.HasPrefix(a, "+") {
-			c.Print(strftime(a[1:], now) + "\n")
-			return 0
-		}
-		if a == "-u" {
+		switch {
+		case strings.HasPrefix(a, "+"):
+			format = a[1:]
+		case a == "-u" || a == "--utc" || a == "--universal":
 			now = now.UTC()
-		}
-		if a == "+%s" {
-			c.Printf("%d\n", now.Unix())
+		case a == "-R" || a == "--rfc-email":
+			format = "%a, %d %b %Y %H:%M:%S %z"
+		case a == "-I" || a == "--iso-8601" || a == "-Idate" || a == "--iso-8601=date":
+			format = "%Y-%m-%d"
+		case a == "-Iseconds" || a == "--iso-8601=seconds":
+			format = "%Y-%m-%dT%H:%M:%S%:z"
+		case a == "--version":
+			c.Print("date (GNU coreutils) 8.32\n")
 			return 0
+		case (a == "-d" || a == "--date") && i+1 < len(c.Args):
+			i++
+			if t, ok := parseDateArg(c.Args[i], now); ok {
+				now = t
+			} else {
+				fmt.Fprintf(c.Stderr, "date: invalid date '%s'\n", c.Args[i])
+				return 1
+			}
+		case a == "-s" || a == "--set":
+			fmt.Fprint(c.Stderr, "date: cannot set date: Operation not permitted\n")
+			return 1
 		}
 	}
-	c.Print(now.Format("Mon Jan  2 15:04:05 MST 2006") + "\n")
+	c.Print(strftime(format, now) + "\n")
 	return 0
 }
 
-// strftime handles the handful of %-codes scripts actually use.
+// parseDateArg understands the -d forms scripts use: @epoch, now,
+// yesterday, tomorrow and "N unit(s) ago".
+func parseDateArg(s string, now time.Time) (time.Time, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	switch s {
+	case "now", "today", "":
+		return now, true
+	case "yesterday":
+		return now.AddDate(0, 0, -1), true
+	case "tomorrow":
+		return now.AddDate(0, 0, 1), true
+	}
+	if strings.HasPrefix(s, "@") {
+		n, err := strconv.ParseInt(s[1:], 10, 64)
+		return time.Unix(n, 0).In(now.Location()), err == nil
+	}
+	f := strings.Fields(s)
+	if len(f) >= 2 {
+		n, err := strconv.Atoi(f[0])
+		if err != nil {
+			return now, false
+		}
+		if len(f) == 3 && f[2] == "ago" {
+			n = -n
+		}
+		switch strings.TrimSuffix(f[1], "s") {
+		case "second", "sec":
+			return now.Add(time.Duration(n) * time.Second), true
+		case "minute", "min":
+			return now.Add(time.Duration(n) * time.Minute), true
+		case "hour":
+			return now.Add(time.Duration(n) * time.Hour), true
+		case "day":
+			return now.AddDate(0, 0, n), true
+		case "week":
+			return now.AddDate(0, 0, 7*n), true
+		case "month":
+			return now.AddDate(0, n, 0), true
+		case "year":
+			return now.AddDate(n, 0, 0), true
+		}
+	}
+	return now, false
+}
+
+// strftime implements GNU date's conversion specifications.
 func strftime(f string, t time.Time) string {
-	rep := strings.NewReplacer(
-		"%Y", t.Format("2006"), "%m", t.Format("01"), "%d", t.Format("02"),
-		"%H", t.Format("15"), "%M", t.Format("04"), "%S", t.Format("05"),
-		"%F", t.Format("2006-01-02"), "%T", t.Format("15:04:05"),
-		"%s", strconv.FormatInt(t.Unix(), 10), "%y", t.Format("06"),
-		"%b", t.Format("Jan"), "%a", t.Format("Mon"), "%j", fmt.Sprintf("%03d", t.YearDay()),
-		"%%", "%",
-	)
-	return rep.Replace(f)
+	var b strings.Builder
+	for i := 0; i < len(f); i++ {
+		if f[i] != '%' || i+1 >= len(f) {
+			b.WriteByte(f[i])
+			continue
+		}
+		i++
+		noPad := false
+		if f[i] == '-' && i+1 < len(f) {
+			noPad = true
+			i++
+		}
+		num := func(n, width int, pad byte) string {
+			if noPad {
+				return strconv.Itoa(n)
+			}
+			s := strconv.Itoa(n)
+			for len(s) < width {
+				s = string(pad) + s
+			}
+			return s
+		}
+		hour12 := t.Hour() % 12
+		if hour12 == 0 {
+			hour12 = 12
+		}
+		_, week := t.ISOWeek()
+		switch f[i] {
+		case 'a':
+			b.WriteString(t.Format("Mon"))
+		case 'A':
+			b.WriteString(t.Format("Monday"))
+		case 'b', 'h':
+			b.WriteString(t.Format("Jan"))
+		case 'B':
+			b.WriteString(t.Format("January"))
+		case 'c':
+			b.WriteString(strftime("%a %b %e %H:%M:%S %Y", t))
+		case 'C':
+			b.WriteString(num(t.Year()/100, 2, '0'))
+		case 'd':
+			b.WriteString(num(t.Day(), 2, '0'))
+		case 'D':
+			b.WriteString(strftime("%m/%d/%y", t))
+		case 'e':
+			b.WriteString(num(t.Day(), 2, ' '))
+		case 'F':
+			b.WriteString(strftime("%Y-%m-%d", t))
+		case 'G':
+			y, _ := t.ISOWeek()
+			b.WriteString(strconv.Itoa(y))
+		case 'H':
+			b.WriteString(num(t.Hour(), 2, '0'))
+		case 'I':
+			b.WriteString(num(hour12, 2, '0'))
+		case 'j':
+			b.WriteString(num(t.YearDay(), 3, '0'))
+		case 'k':
+			b.WriteString(num(t.Hour(), 2, ' '))
+		case 'l':
+			b.WriteString(num(hour12, 2, ' '))
+		case 'm':
+			b.WriteString(num(int(t.Month()), 2, '0'))
+		case 'M':
+			b.WriteString(num(t.Minute(), 2, '0'))
+		case 'n':
+			b.WriteByte('\n')
+		case 'N':
+			b.WriteString(fmt.Sprintf("%09d", t.Nanosecond()))
+		case 'p':
+			b.WriteString(t.Format("PM"))
+		case 'P':
+			b.WriteString(strings.ToLower(t.Format("PM")))
+		case 'r':
+			b.WriteString(strftime("%I:%M:%S %p", t))
+		case 'R':
+			b.WriteString(strftime("%H:%M", t))
+		case 's':
+			b.WriteString(strconv.FormatInt(t.Unix(), 10))
+		case 'S':
+			b.WriteString(num(t.Second(), 2, '0'))
+		case 't':
+			b.WriteByte('\t')
+		case 'T':
+			b.WriteString(strftime("%H:%M:%S", t))
+		case 'u':
+			wd := int(t.Weekday())
+			if wd == 0 {
+				wd = 7
+			}
+			b.WriteString(strconv.Itoa(wd))
+		case 'V':
+			b.WriteString(num(week, 2, '0'))
+		case 'w':
+			b.WriteString(strconv.Itoa(int(t.Weekday())))
+		case 'x':
+			b.WriteString(strftime("%m/%d/%y", t))
+		case 'X':
+			b.WriteString(strftime("%H:%M:%S", t))
+		case 'y':
+			b.WriteString(num(t.Year()%100, 2, '0'))
+		case 'Y':
+			b.WriteString(strconv.Itoa(t.Year()))
+		case 'z':
+			b.WriteString(t.Format("-0700"))
+		case ':':
+			if i+1 < len(f) && f[i+1] == 'z' {
+				i++
+				b.WriteString(t.Format("-07:00"))
+			} else {
+				b.WriteString("%:")
+			}
+		case 'Z':
+			b.WriteString(t.Format("MST"))
+		case '%':
+			b.WriteByte('%')
+		default:
+			b.WriteByte('%')
+			b.WriteByte(f[i])
+		}
+	}
+	return b.String()
 }
 
 func cmdSleep(c *Context) int {
@@ -789,19 +965,86 @@ func cmdJournalctl(c *Context) int {
 }
 
 func cmdCrontab(c *Context) int {
-	for _, a := range c.Args[1:] {
-		if a == "-l" {
-			path := "/var/spool/cron/crontabs/" + c.Sess.User
-			data, err := c.readTarget(path)
-			if err != nil || len(data) == 0 {
-				c.Errorf("no crontab for " + c.Sess.User)
-				return 1
-			}
-			c.Stdout.Write(data)
-			return 0
+	user := c.Sess.User
+	var op, file string
+	args := c.Args[1:]
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-u" && i+1 < len(args):
+			user = args[i+1]
+			i++
+		case a == "-l" || a == "-r" || a == "-e" || a == "-i":
+			op = a
+		case a == "-":
+			file = "-"
+		case strings.HasPrefix(a, "-"):
+		default:
+			file = a
 		}
 	}
+	spool := "/var/spool/cron/crontabs/" + user
+	switch op {
+	case "-l":
+		data, err := c.readTarget(spool)
+		if err != nil || len(data) == 0 {
+			fmt.Fprintf(c.Stderr, "no crontab for %s\n", user)
+			return 1
+		}
+		c.Stdout.Write(stripCronHeader(data))
+		return 0
+	case "-r", "-ir":
+		if _, err := c.FS().Stat(spool); err != nil {
+			fmt.Fprintf(c.Stderr, "no crontab for %s\n", user)
+			return 1
+		}
+		_ = c.FS().Remove(spool)
+		return 0
+	case "-e":
+		return 0
+	}
+	var data []byte
+	if file == "" || file == "-" {
+		data, _ = io.ReadAll(c.Stdin)
+		file = "-"
+	} else {
+		d, err := c.readTarget(file)
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "%s: No such file or directory\n", file)
+			return 1
+		}
+		data = d
+	}
+	// Installing a crontab is a classic persistence step; it only ever
+	// lands in the session's own filesystem.
+	header := fmt.Sprintf("# DO NOT EDIT THIS FILE - edit the master and reinstall.\n# (%s installed on %s)\n# (Cron version -- $Id: crontab.c,v 2.13 1994/01/17 03:20:37 vixie Exp $)\n",
+		file, c.Sess.Machine.Now().Format("Mon Jan _2 15:04:05 2006"))
+	gid := 0
+	for id, name := range newIDNames(c).groups {
+		if name == "crontab" {
+			gid = id
+		}
+	}
+	opts := vfs.WriteOptions{Mode: 0o600, UID: c.Sess.Cred.UID, GID: gid}
+	if err := c.FS().WriteFile(spool, append([]byte(header), data...), opts); err != nil {
+		fmt.Fprintf(c.Stderr, "crontab: installing new crontab: %s\n", vfs.Strerror(err))
+		return 1
+	}
 	return 0
+}
+
+// stripCronHeader drops the "DO NOT EDIT" banner Debian's crontab writes,
+// which `crontab -l` does not show.
+func stripCronHeader(data []byte) []byte {
+	s := string(data)
+	if !strings.HasPrefix(s, "# DO NOT EDIT THIS FILE") {
+		return data
+	}
+	for k := 0; k < 3; k++ {
+		if i := strings.IndexByte(s, '\n'); i >= 0 && strings.HasPrefix(s, "#") {
+			s = s[i+1:]
+		}
+	}
+	return []byte(s)
 }
 
 func cmdSudo(c *Context) int {
@@ -887,13 +1130,13 @@ func cmdSu(c *Context) int {
 
 func cmdBusybox(c *Context) int {
 	if len(c.Args) < 2 {
-		c.Print("BusyBox v1.30.1 (Ubuntu 1:1.30.1-7ubuntu3) multi-call binary.\n")
+		c.Print("BusyBox v1.30.1 (Ubuntu 1:1.30.1-7ubuntu3.1) multi-call binary.\nBusyBox is copyrighted by many authors between 1998-2015.\nLicensed under GPLv2. See source distribution for detailed\ncopyright notices.\n\nUsage: busybox [function [arguments]...]\n   or: busybox --list[-full]\n   or: busybox --install [-s] [DIR]\n   or: function [arguments]...\n")
 		return 0
 	}
 	applet := c.Args[1]
 	// Mirai and friends probe with `busybox ECCHI`, `busybox MIRAI`, etc.
 	if strings.ToUpper(applet) == applet && !c.Interp.Has(strings.ToLower(applet)) {
-		c.Errorf("%s: applet not found", applet)
+		fmt.Fprintf(c.Stderr, "%s: applet not found\n", applet)
 		return 127
 	}
 	if c.Interp.Has(applet) {
@@ -902,81 +1145,136 @@ func cmdBusybox(c *Context) int {
 		nctx.Args = sub
 		return c.Interp.cmds[applet](&nctx)
 	}
-	c.Errorf("%s: applet not found", applet)
+	fmt.Fprintf(c.Stderr, "%s: applet not found\n", applet)
 	return 127
 }
 
-// cmdShellC handles `sh -c "..."` / `bash -c "..."`; without -c it accepts
-// a script file argument or does nothing (a nested interactive shell just
-// returns to the same session).
-func cmdShellC(c *Context) int {
-	args := c.Args[1:]
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-c" && i+1 < len(args):
-			return c.Interp.run(c.Sess, args[i+1], c.Stdin, c.Stdout, c.Stderr)
-		case strings.HasPrefix(a, "-"):
-			// -x, -e, etc.: ignore
-		default:
-			// Treat as a script path: read and run each line.
-			data, err := c.readTarget(a)
-			if err != nil {
-				c.Errorf("%s: %s", a, "No such file or directory")
-				return 127
-			}
-			status := 0
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
-					continue
-				}
-				status = c.Interp.run(c.Sess, line, c.Stdin, c.Stdout, c.Stderr)
-			}
-			return status
-		}
-	}
-	return 0
-}
+// cmdShellC handles sh / bash / dash: `-c "..."`, a script file, or
+// commands piped on stdin, each in a child shell (see runChildShell). With
+// none of those it does nothing: a nested interactive shell just returns
+// to the same session.
+func cmdShellC(c *Context) int { return runChildShell(c) }
 
 func cmdPrintf(c *Context) int {
-	if len(c.Args) < 2 {
-		return 0
+	args := c.Args[1:]
+	varName := ""
+	if len(args) >= 2 && args[0] == "-v" {
+		varName, args = args[1], args[2:]
 	}
-	format := c.Args[1]
-	format = expandEscapes(format)
-	args := c.Args[2:]
-	// Minimal printf: substitute %s and %d in order; extra %-specs get "".
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+	if len(args) == 0 {
+		fmt.Fprint(c.Stderr, "-bash: printf: usage: printf [-v var] format [arguments]\n")
+		return 2
+	}
+	out, status := bashPrintf(c, expandEscapes(args[0]), args[1:])
+	if varName != "" {
+		c.Sess.Env[varName] = out
+		return status
+	}
+	c.Print(out)
+	return status
+}
+
+// bashPrintf formats like bash's printf builtin: the format is reused until
+// every argument is consumed, missing arguments read as "" or 0, and %b
+// expands backslash escapes in its argument.
+func bashPrintf(c *Context, format string, args []string) (string, int) {
 	var b strings.Builder
+	status := 0
 	ai := 0
-	for i := 0; i < len(format); i++ {
-		if format[i] == '%' && i+1 < len(format) {
-			spec := format[i+1]
-			switch spec {
-			case 's':
-				if ai < len(args) {
-					b.WriteString(args[ai])
-					ai++
-				}
-				i++
-				continue
-			case 'd', 'i':
-				if ai < len(args) {
-					n, _ := strconv.Atoi(args[ai])
-					b.WriteString(strconv.Itoa(n))
-					ai++
-				}
-				i++
-				continue
-			case '%':
-				b.WriteByte('%')
-				i++
+	next := func() (string, bool) {
+		if ai < len(args) {
+			ai++
+			return args[ai-1], true
+		}
+		return "", false
+	}
+	num := func(s string) int64 {
+		if s == "" {
+			return 0
+		}
+		if len(s) > 1 && (s[0] == '\'' || s[0] == '"') {
+			return int64([]rune(s[1:])[0])
+		}
+		n, err := strconv.ParseInt(s, 0, 64)
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "-bash: printf: %s: invalid number\n", s)
+			status = 1
+		}
+		return n
+	}
+	for pass := 0; pass < 10000; pass++ {
+		consumed := ai
+		for i := 0; i < len(format); i++ {
+			if format[i] != '%' || i+1 >= len(format) {
+				b.WriteByte(format[i])
 				continue
 			}
+			j := i + 1
+			for j < len(format) && strings.IndexByte("-+ #0", format[j]) >= 0 {
+				j++
+			}
+			spec := format[i:j]
+			for j < len(format) && (format[j] >= '0' && format[j] <= '9' || format[j] == '.' || format[j] == '*') {
+				if format[j] == '*' {
+					v, _ := next()
+					spec += strconv.FormatInt(num(v), 10)
+				} else {
+					spec += string(format[j])
+				}
+				j++
+			}
+			if j >= len(format) {
+				b.WriteString(format[i:])
+				break
+			}
+			verb := format[j]
+			i = j
+			switch verb {
+			case '%':
+				b.WriteByte('%')
+			case 's':
+				v, _ := next()
+				fmt.Fprintf(&b, spec+"s", v)
+			case 'b':
+				v, _ := next()
+				fmt.Fprintf(&b, spec+"s", expandEscapes(v))
+			case 'q':
+				v, _ := next()
+				b.WriteString(shellQuoteJoin([]string{v}))
+			case 'c':
+				if v, _ := next(); v != "" {
+					fmt.Fprintf(&b, spec+"c", []rune(v)[0])
+				}
+			case 'd', 'i':
+				v, _ := next()
+				fmt.Fprintf(&b, spec+"d", num(v))
+			case 'u':
+				v, _ := next()
+				fmt.Fprintf(&b, spec+"d", uint64(num(v)))
+			case 'o', 'x', 'X':
+				v, _ := next()
+				fmt.Fprintf(&b, spec+string(verb), num(v))
+			case 'f', 'F', 'e', 'E', 'g', 'G':
+				v, _ := next()
+				f, err := strconv.ParseFloat(v, 64)
+				if err != nil && v != "" {
+					fmt.Fprintf(c.Stderr, "-bash: printf: %s: invalid number\n", v)
+					status = 1
+				}
+				fmt.Fprintf(&b, spec+string(verb), f)
+			default:
+				fmt.Fprintf(c.Stderr, "-bash: printf: `%c': invalid format character\n", verb)
+				return b.String(), 1
+			}
 		}
-		b.WriteByte(format[i])
+		if ai >= len(args) || ai == consumed || b.Len() > 1<<20 {
+			break
+		}
 	}
-	c.Print(b.String())
-	return 0
+	return b.String(), status
 }
 
 func cmdSeq(c *Context) int {

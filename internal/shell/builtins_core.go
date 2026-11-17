@@ -28,11 +28,11 @@ func (in *Interp) registerCore() {
 	in.Register("unalias", func(*Context) int { return 0 })
 	in.Register("test", cmdTest)
 	in.Register("[", cmdTest)
+	in.registerShell()
 }
 
-// ErrExit is returned via the session when `exit` runs, so the caller
-// (the pty loop) can close the connection. We signal it with a status
-// field rather than an error to keep Command simple.
+// exitSignal is panicked by `exit` (and a few fatal errors) and recovered
+// where the shell process ends: Run, a subshell, or a child sh -c.
 type exitSignal struct{ code int }
 
 func cmdEcho(c *Context) int {
@@ -152,62 +152,97 @@ func cmdPwd(c *Context) int {
 
 func cmdCd(c *Context) int {
 	s := c.Sess
-	target := s.Env["HOME"]
-	if len(c.Args) > 1 {
-		arg := c.Args[1]
-		if arg == "-" {
-			arg = s.Env["OLDPWD"]
-			if arg == "" {
-				c.Errorf("OLDPWD not set")
-				return 1
-			}
-			c.Print(arg + "\n")
-		}
-		target = s.abs(arg)
+	opts, args := optArgs(c.Args[1:])
+	physical := strings.ContainsRune(opts, 'P')
+	if len(args) > 1 {
+		c.shellErrorf("too many arguments")
+		return 1
 	}
+	home, ok := s.Env["HOME"]
+	arg := home
+	if len(args) == 1 {
+		arg = args[0]
+	} else if !ok {
+		c.shellErrorf("HOME not set")
+		return 1
+	}
+	if arg == "-" {
+		old, ok := s.Env["OLDPWD"]
+		if !ok || old == "" {
+			c.shellErrorf("OLDPWD not set")
+			return 1
+		}
+		arg = old
+		c.Print(arg + "\n")
+	}
+	if arg == "" {
+		return 0
+	}
+	target := s.abs(arg)
 	info, err := s.FS.Stat(target)
 	if err != nil {
-		c.Errorf("%s: No such file or directory", argOr(c, s.Env["HOME"]))
+		c.shellErrorf("%s: No such file or directory", arg)
 		return 1
 	}
 	if !info.IsDir() {
-		c.Errorf("%s: Not a directory", c.Args[len(c.Args)-1])
+		c.shellErrorf("%s: Not a directory", arg)
 		return 1
 	}
 	if !permit(s, target, 'x') {
-		c.Errorf("%s: Permission denied", c.Args[len(c.Args)-1])
+		c.shellErrorf("%s: Permission denied", arg)
 		return 1
 	}
-	real, _ := s.FS.RealPath(target)
-	s.Env["OLDPWD"] = s.Cwd
-	s.Cwd = real
-	s.Env["PWD"] = real
-	return 0
-}
-
-func argOr(c *Context, def string) string {
-	if len(c.Args) > 1 {
-		return c.Args[1]
+	// Like bash, the new directory is the logical path (cd /bin; pwd
+	// says /bin) unless -P asks for the physical one.
+	if physical {
+		target, _ = s.FS.RealPath(target)
 	}
-	return def
+	s.Env["OLDPWD"] = s.Cwd
+	s.Cwd = target
+	s.Env["PWD"] = target
+	return 0
 }
 
 func cmdExport(c *Context) int {
-	if len(c.Args) == 1 {
-		return cmdEnvSorted(c, "declare -x ")
-	}
-	for _, a := range c.Args[1:] {
-		if name, val, ok := strings.Cut(a, "="); ok {
-			c.Sess.Env[name] = val
+	opts, args := optArgs(c.Args[1:])
+	if len(args) == 0 || strings.ContainsRune(opts, 'p') {
+		env := effectiveEnv(c)
+		keys := make([]string, 0, len(env))
+		for k := range env {
+			keys = append(keys, k)
 		}
-		// export NAME with no value keeps the existing value; nothing to do.
+		sortStrings(keys)
+		for _, k := range keys {
+			c.Printf("declare -x %s=%q\n", k, env[k])
+		}
+		return 0
 	}
-	return 0
+	if strings.ContainsAny(opts, "nf") {
+		return 0
+	}
+	status := 0
+	for _, a := range args {
+		// export NAME with no value keeps the existing value.
+		status |= assignArg(c, a, false)
+	}
+	return status
 }
 
 func cmdUnset(c *Context) int {
-	for _, a := range c.Args[1:] {
+	opts, args := optArgs(c.Args[1:])
+	funcs := strings.ContainsRune(opts, 'f')
+	for _, a := range args {
+		if funcs {
+			delete(c.Sess.funcs, a)
+			continue
+		}
+		if _, ok := c.Sess.Env[a]; !ok && !strings.ContainsRune(opts, 'v') {
+			delete(c.Sess.funcs, a)
+		}
 		delete(c.Sess.Env, a)
+		if a == "PATH" {
+			c.Sess.hashed = nil
+		}
 	}
 	return 0
 }
@@ -251,24 +286,52 @@ func cmdEnvSorted(c *Context, prefix string) int {
 
 func cmdSet(c *Context) int {
 	// `set` with no args lists variables like env (bash lists shell vars too,
-	// but env is close enough for a honeypot). Options are accepted silently.
-	if len(c.Args) > 1 {
-		return 0
+	// but env is close enough for a honeypot). Options are accepted
+	// silently; `set -- a b` and `set a b` set the positional parameters.
+	args := c.Args[1:]
+	if len(args) == 0 {
+		return cmdEnvSorted(c, "")
 	}
-	return cmdEnvSorted(c, "")
+	for len(args) > 0 {
+		a := args[0]
+		if a == "--" || a == "-" {
+			c.shell().params = append([]string(nil), args[1:]...)
+			return 0
+		}
+		if len(a) < 2 || (a[0] != '-' && a[0] != '+') {
+			c.shell().params = append([]string(nil), args...)
+			return 0
+		}
+		args = args[1:]
+		if strings.ContainsRune(a, 'o') && len(args) > 0 {
+			args = args[1:] // -o name
+		}
+	}
+	return 0
 }
 
 func cmdExit(c *Context) int {
 	code := c.Sess.Status
 	if len(c.Args) > 1 {
-		if n, err := strconv.Atoi(c.Args[1]); err == nil {
-			code = n & 0xff
+		n, err := strconv.Atoi(c.Args[1])
+		if err != nil {
+			c.shellErrorf("%s: numeric argument required", c.Args[1])
+			n = 2
 		}
+		code = n & 0xff
 	}
 	panic(exitSignal{code: code})
 }
 
 func cmdHistory(c *Context) int {
+	opts, _ := optArgs(c.Args[1:])
+	if strings.ContainsRune(opts, 'c') {
+		c.Sess.History = nil
+		return 0
+	}
+	if opts != "" {
+		return 0 // -w, -a, -r, -d ...: nothing to show
+	}
 	for i, h := range c.Sess.History {
 		c.Printf("%5d  %s\n", i+1, h)
 	}

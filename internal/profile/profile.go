@@ -48,19 +48,23 @@ type Profile struct {
 	// Kernel is the uname -r string; KernelVersion the uname -v string.
 	Kernel        string `json:"kernel"`
 	KernelVersion string `json:"kernel_version"`
-	Arch          string `json:"arch"`
-	CPUModel      string `json:"cpu_model"`
-	CPUCores      int    `json:"cpu_cores"`
-	MemMB         int    `json:"mem_mb"`
-	SwapMB        int    `json:"swap_mb"`
-	DiskGB        int    `json:"disk_gb"`
-	DiskUsedPct   int    `json:"disk_used_pct"`
-	Interface     string `json:"interface"`
-	IPv4          string `json:"ipv4"`
-	Netmask       string `json:"netmask"`
-	Gateway       string `json:"gateway"`
-	MAC           string `json:"mac"`
-	Timezone      string `json:"timezone"`
+	// SSHVersion is the banner sshd sends before login. It has to match the
+	// release: OpenSSH 9.6p1 on a box that says 22.04 is a giveaway, since
+	// 22.04 ships 8.9p1.
+	SSHVersion  string `json:"ssh_version"`
+	Arch        string `json:"arch"`
+	CPUModel    string `json:"cpu_model"`
+	CPUCores    int    `json:"cpu_cores"`
+	MemMB       int    `json:"mem_mb"`
+	SwapMB      int    `json:"swap_mb"`
+	DiskGB      int    `json:"disk_gb"`
+	DiskUsedPct int    `json:"disk_used_pct"`
+	Interface   string `json:"interface"`
+	IPv4        string `json:"ipv4"`
+	Netmask     string `json:"netmask"`
+	Gateway     string `json:"gateway"`
+	MAC         string `json:"mac"`
+	Timezone    string `json:"timezone"`
 	// BootedAgo is how long the box claims to have been up when the
 	// honeypot starts; uptime grows from there.
 	BootedAgo time.Duration `json:"booted_ago"`

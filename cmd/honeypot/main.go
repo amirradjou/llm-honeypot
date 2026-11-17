@@ -105,10 +105,11 @@ func run(args []string) error {
 	defer stop()
 
 	srv := sshd.New(sshd.Config{
-		Addr:        cfg.Addr,
-		AcceptAfter: cfg.AcceptAfter,
-		AuthDelay:   cfg.AuthDelay,
-		IdleTimeout: cfg.IdleTimeout,
+		Addr:          cfg.Addr,
+		ServerVersion: prof.SSHVersion,
+		AcceptAfter:   cfg.AcceptAfter,
+		AuthDelay:     cfg.AuthDelay,
+		IdleTimeout:   cfg.IdleTimeout,
 	}, hostKey, handler, log)
 
 	log.Info("honeypot starting", "addr", cfg.Addr, "data", cfg.DataDir)

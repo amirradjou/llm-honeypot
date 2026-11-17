@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -56,6 +57,11 @@ func (s *Session) Read(p []byte) (int, error) {
 
 // Write sends output to the attacker.
 func (s *Session) Write(p []byte) (int, error) { return s.ch.Write(p) }
+
+// Stderr is the channel's extended-data stream. A real sshd keeps a
+// command's stderr apart from its stdout, and a bot that runs
+// `ssh host cmd 2>/dev/null` notices when the two arrive mixed.
+func (s *Session) Stderr() io.Writer { return s.ch.Stderr() }
 
 // Exit reports the command's exit status and closes the channel. It is
 // safe to call more than once.
@@ -144,7 +150,7 @@ func (s *Server) serveSession(ctx context.Context, conn *Conn, ch ssh.Channel, r
 }
 
 func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- WindowSize, run func()) {
-	ok := false
+	ok, start := false, false
 	switch req.Type {
 	case "pty-req":
 		var r ptyRequest
@@ -169,13 +175,13 @@ func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- Wi
 		}
 	case "shell":
 		ok = true
-		run()
+		start = true
 	case "exec":
 		var r execRequest
 		if err := ssh.Unmarshal(req.Payload, &r); err == nil {
 			sess.Command = r.Command
 			ok = true
-			run()
+			start = true
 		}
 	case "subsystem", "x11-req", "auth-agent-req@openssh.com":
 		// sftp, X11 and agent forwarding are refused, as they would be on a
@@ -186,6 +192,12 @@ func (s *Server) handleRequest(sess *Session, req *ssh.Request, resize chan<- Wi
 	}
 	if req.WantReply {
 		_ = req.Reply(ok, nil)
+	}
+	// Start the command only after the reply: a command that finishes at
+	// once would otherwise send exit-status and close the channel before
+	// the client heard that its exec was accepted, and the client sees EOF.
+	if start {
+		run()
 	}
 }
 

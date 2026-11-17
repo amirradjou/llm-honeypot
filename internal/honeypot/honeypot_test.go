@@ -5,12 +5,16 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -175,4 +179,182 @@ func contains(ss []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// A real sshd keeps a command's stderr on the channel's extended-data
+// stream; `ssh host cmd 2>/dev/null` relies on it.
+func TestExecKeepsStderrApart(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	var stdout, stderr strings.Builder
+	sess.Stdout, sess.Stderr = &stdout, &stderr
+	err = sess.Run("echo out; ls /nonexistent")
+	var ee *ssh.ExitError
+	if !errors.As(err, &ee) || ee.ExitStatus() != 2 {
+		t.Errorf("exit = %v", err)
+	}
+	if stdout.String() != "out\n" || !strings.Contains(stderr.String(), "No such file or directory") {
+		t.Errorf("stdout %q, stderr %q", stdout.String(), stderr.String())
+	}
+}
+
+// An interactive session leaves an asciinema recording of what the
+// attacker saw.
+func TestInteractiveSessionIsRecordedAsCast(t *testing.T) {
+	addr, dataDir := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm-256color", 30, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "uname -n\r")
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+
+	var casts []string
+	deadline := time.Now().Add(3 * time.Second)
+	for len(casts) == 0 && time.Now().Before(deadline) {
+		casts, _ = filepath.Glob(filepath.Join(dataDir, "sessions", "*", "*.cast"))
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(casts) != 1 {
+		t.Fatalf("casts = %v", casts)
+	}
+	data, _ := os.ReadFile(casts[0])
+	text := string(data)
+	if !strings.Contains(text, `"width":100`) || !strings.Contains(text, "srv-web01") || !strings.Contains(text, "logout") {
+		t.Errorf("cast = %s", text)
+	}
+}
+
+// An interactive login shell says -bash, and an unfinished line continues
+// at bash's "> " prompt instead of failing with a syntax error.
+func TestInteractiveShellLooksLikeALoginShell(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm", 24, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "echo $0\r")
+	io.WriteString(stdin, "for i in 1 2; do\r")
+	io.WriteString(stdin, "echo item$i; done\r")
+	io.WriteString(stdin, "nosuchcmd\r")
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+	text := out.String()
+	for _, want := range []string{"-bash\r\n", "> ", "item1\r\nitem2", "-bash: nosuchcmd: command not found"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+// The box keeps its own clock and sshd's environment format; the host's
+// timezone and an "ip:port" in SSH_CLIENT were both giveaways.
+func TestSessionEnvironmentAndBannerLookReal(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	c := dialHoneypot(t, addr, "root", "x")
+	if out := exec(t, c, "echo $SSH_CLIENT"); !regexp.MustCompile(`^127\.0\.0\.1 \d+ 22\n$`).MatchString(out) {
+		t.Errorf("SSH_CLIENT = %q", out)
+	}
+	if out := exec(t, c, "date +%Z"); out != "UTC\n" {
+		t.Errorf("date +%%Z = %q (the profile's timezone is Etc/UTC)", out)
+	}
+
+	sess, err := c.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RequestPty("xterm", 24, 100, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, _ := sess.StdinPipe()
+	var out strings.Builder
+	sess.Stdout = &out
+	if err := sess.Shell(); err != nil {
+		t.Fatal(err)
+	}
+	io.WriteString(stdin, "exit\r")
+	_ = sess.Wait()
+	banner := out.String()
+	if !regexp.MustCompile(`System information as of \w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d UTC \d{4}\r\n`).MatchString(banner) {
+		t.Errorf("sysinfo line wrong:\n%s", banner)
+	}
+	if strings.Contains(banner, "\r\r\n") {
+		t.Errorf("banner has doubled carriage returns")
+	}
+	if !regexp.MustCompile(`Last login: .* from 10\.20\.30\.15\r\n`).MatchString(banner) {
+		t.Errorf("last login wrong:\n%s", banner)
+	}
+}
+
+// A command that finishes at once must still reach the client with its
+// exit status: the exec request is answered before the command starts.
+func TestInstantExecNeverEndsInEOF(t *testing.T) {
+	addr, _ := startHoneypot(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 1500)
+	sem := make(chan struct{}, 40) // stay under the server's MaxConns
+	for i := 0; i < 1500; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			c, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
+				User: "root", Auth: []ssh.AuthMethod{ssh.Password("x")},
+				HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 10 * time.Second,
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer c.Close()
+			s, err := c.NewSession()
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer s.Close()
+			if out, err := s.Output("true"); err != nil || len(out) != 0 {
+				errs <- fmt.Errorf("true = %q, %v", out, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	n := 0
+	for err := range errs {
+		if n < 3 {
+			t.Error(err)
+		}
+		n++
+	}
+	if n > 0 {
+		t.Errorf("%d of 1500 sessions failed", n)
+	}
 }

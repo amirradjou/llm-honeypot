@@ -6,12 +6,12 @@ package machine
 func (m *Machine) seedBins(b *builder) {
 	// coreutils and friends in /usr/bin
 	usrBin := []string{
-		"bash", "dash", "ls", "cat", "echo", "pwd", "cd", "cp", "mv", "rm", "mkdir", "rmdir", "touch", "ln", "chmod",
+		"bash", "dash", "ls", "cat", "echo", "pwd", "cp", "mv", "rm", "mkdir", "rmdir", "touch", "ln", "chmod",
 		"chown", "chgrp", "ln", "readlink", "realpath", "basename", "dirname", "head", "tail", "less", "more", "grep",
 		"egrep", "fgrep", "sed", "awk", "gawk", "cut", "sort", "uniq", "wc", "tr", "tee", "find", "xargs", "which",
 		"whereis", "file", "stat", "du", "df", "free", "ps", "top", "htop", "kill", "pkill", "pgrep", "sleep", "date",
 		"whoami", "who", "w", "id", "groups", "users", "last", "uptime", "uname", "hostname", "hostnamectl", "env",
-		"printenv", "export", "set", "unset", "history", "clear", "reset", "tput", "stty", "tty", "man", "info",
+		"printenv", "clear", "reset", "tput", "stty", "tty", "man", "info",
 		"apropos", "vim.basic", "nano", "emacs", "ed", "tar", "gzip", "gunzip", "zcat", "bzip2", "xz",
 		"zip", "unzip", "curl", "wget", "scp", "sftp", "ssh", "ssh-keygen", "ssh-copy-id", "rsync", "nc", "ncat",
 		"netcat", "telnet", "ftp", "tftp", "socat", "nmap", "dig", "host", "nslookup", "ping", "ping6", "traceroute",
