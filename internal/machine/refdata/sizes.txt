@@ -1,0 +1,4 @@
+11744776 /boot/vmlinuz-5.15.0-203-generic
+33804378 /boot/initrd.img-5.15.0-203-generic
+7248904 /usr/share/misc/magic.mgc
+20320 /etc/ld.so.cache

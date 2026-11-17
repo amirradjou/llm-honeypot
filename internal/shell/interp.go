@@ -25,6 +25,9 @@ type Context struct {
 
 	sh  *shell   // the shell running the command
 	fds *fdTable // its file descriptors (for read -u, eval, exec ...)
+
+	applet       bool // run as a busybox applet rather than from $PATH
+	notInstalled bool // only noting what a missing tool was asked to fetch
 }
 
 // Getenv reads the effective environment (command assignments over session).

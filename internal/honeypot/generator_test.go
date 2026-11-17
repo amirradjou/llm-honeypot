@@ -114,19 +114,21 @@ func TestGeneratorFillsPlaceholderFilesAndWritesBack(t *testing.T) {
 	addr, _ := startWithGenerator(t, g)
 	c := dialHoneypot(t, addr, "root", "x")
 
-	// /etc/services is seeded as a placeholder.
-	out := exec(t, c, "cat /etc/services")
+	// The shop's source is seeded as a placeholder (with built-in content
+	// for when no model is configured).
+	const file = "/srv/bakery/src/server.ts"
+	out := exec(t, c, "cat "+file)
 	if !strings.Contains(out, "ssh 22/tcp") {
 		t.Fatalf("placeholder not generated: %q", out)
 	}
 	req := g.lastReq.Load().(llm.Request)
-	if req.Kind != llm.KindFile || req.Input != "/etc/services" || req.Hint == "" {
+	if req.Kind != llm.KindFile || req.Input != file || req.Hint == "" {
 		t.Errorf("file request wrong: %+v", req)
 	}
 	// Written back: within the same session, a second read and ls agree and
 	// do not call the model again.
 	before := g.calls.Load()
-	out = exec(t, c, "cat /etc/services; cat /etc/services; ls -l /etc/services")
+	out = exec(t, c, "cat "+file+"; cat "+file+"; ls -l "+file)
 	if strings.Count(out, "ssh 22/tcp") != 2 {
 		t.Errorf("repeat reads inconsistent: %q", out)
 	}

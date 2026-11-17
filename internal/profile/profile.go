@@ -31,7 +31,7 @@ type Process struct {
 	RSS     int     `json:"rss"`
 	TTY     string  `json:"tty"`
 	Stat    string  `json:"stat"`
-	Start   string  `json:"start"`
+	Start   string  `json:"start"` // ps START; empty means the boot day
 	Time    string  `json:"time"`
 	Command string  `json:"command"`
 }

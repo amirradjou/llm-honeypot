@@ -3,6 +3,7 @@ package shell
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUnameAndHost(t *testing.T) {
@@ -10,11 +11,11 @@ func TestUnameAndHost(t *testing.T) {
 	if out, _, _ := run(t, in, s, "uname"); out != "Linux\n" {
 		t.Errorf("uname = %q", out)
 	}
-	if out, _, _ := run(t, in, s, "uname -r"); out != "5.15.0-113-generic\n" {
+	if out, _, _ := run(t, in, s, "uname -r"); out != "5.15.0-203-generic\n" {
 		t.Errorf("uname -r = %q", out)
 	}
 	out, _, _ := run(t, in, s, "uname -a")
-	if !strings.HasPrefix(out, "Linux srv-web01 5.15.0-113-generic") || !strings.Contains(out, "x86_64 GNU/Linux") {
+	if !strings.HasPrefix(out, "Linux srv-web01 5.15.0-203-generic") || !strings.Contains(out, "x86_64 GNU/Linux") {
 		t.Errorf("uname -a = %q", out)
 	}
 	if out, _, _ := run(t, in, s, "hostname"); out != "srv-web01\n" {
@@ -186,4 +187,91 @@ func min2(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Recorded from the reference box (tools/refdata): `dpkg -l nginx | cat`.
+const dpkgNginxUbuntu = `Desired=Unknown/Install/Remove/Purge/Hold
+| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
+|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
+||/ Name           Version             Architecture Description
++++-==============-===================-============-==========================================
+ii  nginx          1.18.0-6ubuntu14.22 amd64        small, powerful, scalable web/proxy server
+`
+
+func TestDpkgQueriesMatchUbuntu(t *testing.T) {
+	in, s := testSession(t)
+	if out, _, st := run(t, in, s, "dpkg -l nginx"); out != dpkgNginxUbuntu || st != 0 {
+		t.Errorf("dpkg -l nginx (exit %d) =\n%s", st, out)
+	}
+	if out, _, _ := run(t, in, s, "dpkg -l | wc -l"); strings.TrimSpace(out) != "642" {
+		t.Errorf("dpkg -l | wc -l = %q, the reference box has 642", out)
+	}
+	if _, errb, st := run(t, in, s, "dpkg -l gcc"); st != 1 || errb != "dpkg-query: no packages found matching gcc\n" {
+		t.Errorf("dpkg -l gcc: exit %d, %q", st, errb)
+	}
+	if out, _, st := run(t, in, s, "dpkg -s openssh-server | head -n 2"); st != 0 || out != "Package: openssh-server\nStatus: install ok installed\n" {
+		t.Errorf("dpkg -s = %q", out)
+	}
+	if out, _, _ := run(t, in, s, "dpkg-query -W nginx curl"); out != "nginx\t1.18.0-6ubuntu14.22\ncurl\t7.81.0-1ubuntu1.30\n" {
+		t.Errorf("dpkg-query -W = %q", out)
+	}
+	out, errb, _ := run(t, in, s, "apt list --installed nginx")
+	if out != "Listing...\nnginx/jammy-updates,jammy-security,now 1.18.0-6ubuntu14.22 amd64 [installed]\n" ||
+		!strings.Contains(errb, "WARNING: apt does not have a stable CLI interface") {
+		t.Errorf("apt list --installed nginx = %q / %q", out, errb)
+	}
+	if out, _, _ := run(t, in, s, "which gcc nmap docker kubectl mysql redis-cli ruby emacs; echo $?"); out != "1\n" {
+		t.Errorf("which found tools the box does not have: %q", out)
+	}
+}
+
+// ls -l, wc -c, cat and grep agree about the logs, model or no model.
+func TestLogsReadConsistently(t *testing.T) {
+	in, s := testSession(t)
+	for _, f := range []string{"/var/log/auth.log", "/var/log/syslog", "/var/log/nginx/access.log", "/etc/services", "/srv/bakery/src/server.ts"} {
+		ls, _, _ := run(t, in, s, "ls -l "+f)
+		wc, _, _ := run(t, in, s, "wc -c < "+f)
+		cat, _, _ := run(t, in, s, "cat "+f+" | wc -c")
+		size := strings.Fields(ls)[4]
+		if strings.TrimSpace(wc) != size || strings.TrimSpace(cat) != size || size == "0" {
+			t.Errorf("%s: ls %s, wc -c %s, cat | wc -c %s", f, size, strings.TrimSpace(wc), strings.TrimSpace(cat))
+		}
+	}
+	n, _, _ := run(t, in, s, "grep -c sshd /var/log/auth.log")
+	tail, _, _ := run(t, in, s, "grep sshd /var/log/auth.log | wc -l")
+	if n != tail || strings.TrimSpace(n) == "0" {
+		t.Errorf("grep -c sshd = %q, grep | wc -l = %q", n, tail)
+	}
+	// every admin login `last` lists since auth.log began is in auth.log
+	last, _, _ := run(t, in, s, "last")
+	auth, _, _ := run(t, in, s, "cat /var/log/auth.log")
+	logStart, err := time.Parse(time.Stamp, auth[:len(time.Stamp)])
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, line := range strings.Split(last, "\n")[1:] {
+		f := strings.Fields(line)
+		if len(f) < 7 || f[0] == "reboot" {
+			continue
+		}
+		at, err := time.Parse("Jan _2 15:04", strings.Join(f[4:7], " "))
+		if err != nil || at.Before(logStart) {
+			continue
+		}
+		checked++
+		want := at.Format("Jan _2 15:04") + ":"
+		found := false
+		for _, a := range strings.Split(auth, "\n") {
+			if strings.HasPrefix(a, want) && strings.Contains(a, "Accepted publickey for "+f[0]+" from "+f[2]+" ") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("last shows %q but auth.log has no such login", line)
+		}
+	}
+	if checked == 0 {
+		t.Error("no login of this week to compare; pick another test clock")
+	}
 }

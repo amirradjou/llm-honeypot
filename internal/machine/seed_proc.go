@@ -52,10 +52,10 @@ func (m *Machine) seedProc(b *builder) {
 		fmt.Sprintf("    lo: %d %d    0    0    0     0          0         0 %d %d    0    0    0     0       0          0", 48211932, 261402, 48211932, 261402),
 		fmt.Sprintf("  %s: %d %d    0    0    0     0          0         0 %d %d    0    0    0     0       0          0", p.Interface, 9318472113, 9182377, 21873341922, 12928311),
 	), 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/net/tcp", 1800, "/proc/net/tcp listing listeners on :0016 (ssh), :0050 (http), :01BB (https), :0BB8 bound to 0100007F (node), :1538 bound to 0100007F (postgres), plus one established ssh connection", 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/net/route", 384, "/proc/net/route with a default route via "+p.Gateway+" on "+p.Interface, 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/net/arp", 240, "/proc/net/arp with the gateway "+p.Gateway, 0o444, 0, 0, ageBoot)
-	b.placeholder("/proc/stat", 1200, "/proc/stat for a "+fmt.Sprint(p.CPUCores)+"-core mostly idle box up for "+m.Uptime().Round(1e9).String(), 0o444, 0, 0, ageBoot)
+	b.dynamic("/proc/net/tcp", m.procNetTCP, 0o444)
+	b.dynamic("/proc/net/route", m.procNetRoute, 0o444)
+	b.dynamic("/proc/net/arp", m.procNetARP, 0o444)
+	b.dynamic("/proc/stat", m.procStat, 0o444)
 	// Real files, not model placeholders: bots grep TracerPid here to spot
 	// a debugger, and an empty answer is its own giveaway.
 	b.file("/proc/self/status", procStatus("cat", "R (running)", 4189, 4122, 8456, 980, p.CPUCores), 0o444, 0, 0, ageBoot)

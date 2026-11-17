@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"sync"
 	"time"
 	_ "time/tzdata" // the distroless image has no zoneinfo
 
@@ -23,6 +24,9 @@ type Machine struct {
 	BootTime time.Time
 	// Now is the clock; tests replace it.
 	Now func() time.Time
+
+	logsMu sync.Mutex
+	logsAt time.Time // the minute the template's logs were written up to
 }
 
 // New seeds a machine from p. now is used for the boot time and for the
@@ -71,8 +75,25 @@ func (m *Machine) LoadAvg() (l1, l5, l15 float64) {
 func round2(f float64) float64 { return math.Round(f*100) / 100 }
 
 // NewSessionFS returns an independent copy of the template filesystem.
+// The template's logs are first brought up to the current minute, so a box
+// that has been up for weeks still logs today; within a minute every
+// session sees the same bytes.
 func (m *Machine) NewSessionFS() *vfs.FS {
+	m.refreshLogs()
 	return m.FS.Clone()
+}
+
+func (m *Machine) refreshLogs() {
+	m.logsMu.Lock()
+	defer m.logsMu.Unlock()
+	now := m.Now().Truncate(time.Minute)
+	if !now.After(m.logsAt) {
+		return
+	}
+	// Only seeded paths are written, and a failure leaves the old logs.
+	if err := m.writeLogs(m.FS, now); err == nil {
+		m.logsAt = now
+	}
 }
 
 // Age classes give seeded files believable modification times: system
