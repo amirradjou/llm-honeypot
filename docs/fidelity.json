@@ -141,7 +141,7 @@
   "command": "w",
   "honeypot": {
    "exit": 0,
-   "stdout": " 22:34:05 up 19 days,  5:12,  1 user,  load average: 0.14, 0.11, 0.09\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU   WHAT\nroot     pts/0    127.0.0.1        22:20    2.00s  0.05s  0.00s  -bash\n",
+   "stdout": " 22:41:25 up 19 days,  5:12,  1 user,  load average: 0.11, 0.11, 0.08\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU   WHAT\nroot     pts/0    127.0.0.1        22:27    2.00s  0.05s  0.00s  -bash\n",
    "stderr": ""
   },
   "reference": {
@@ -158,7 +158,7 @@
   "command": "top -bn1 | head -n 5",
   "honeypot": {
    "exit": 0,
-   "stdout": "top - 22:34:05 up 19 days,  5:12,  1 user,  load average: 0.14, 0.11, 0.09\nTasks: 36 total,   1 running, 35 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.7 us,  0.3 sy,  0.0 ni, 98.8 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :   3936.0 total,    865.9 free,   1298.9 used,   1771.2 buff/cache\nMi…",
+   "stdout": "top - 22:41:25 up 19 days,  5:12,  1 user,  load average: 0.11, 0.11, 0.08\nTasks: 36 total,   1 running, 35 sleeping,   0 stopped,   0 zombie\n%Cpu(s):  0.7 us,  0.3 sy,  0.0 ni, 98.8 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :   3936.0 total,    865.9 free,   1298.9 used,   1771.2 buff/cache\nMi…",
    "stderr": ""
   },
   "reference": {
@@ -345,7 +345,7 @@
   "command": "uptime",
   "honeypot": {
    "exit": 0,
-   "stdout": " 22:34:07 up 19 days,  5:12,  1 user,  load average: 0.15, 0.11, 0.09\n",
+   "stdout": " 22:41:27 up 19 days,  5:12,  1 user,  load average: 0.10, 0.11, 0.08\n",
    "stderr": ""
   },
   "reference": {
@@ -362,7 +362,7 @@
   "command": "cat /proc/uptime",
   "honeypot": {
    "exit": 0,
-   "stdout": "1660324.05 3221028.66\n",
+   "stdout": "1660330.70 3221041.56\n",
    "stderr": ""
   },
   "reference": {
@@ -498,7 +498,7 @@
   "command": "wc -c /var/log/auth.log",
   "honeypot": {
    "exit": 0,
-   "stdout": "537048 /var/log/auth.log\n",
+   "stdout": "538869 /var/log/auth.log\n",
    "stderr": ""
   },
   "reference": {
@@ -515,7 +515,7 @@
   "command": "grep -c sshd /var/log/auth.log",
   "honeypot": {
    "exit": 0,
-   "stdout": "3888\n",
+   "stdout": "3902\n",
    "stderr": ""
   },
   "reference": {
@@ -532,7 +532,7 @@
   "command": "tail -n 3 /var/log/auth.log | grep -c sshd",
   "honeypot": {
    "exit": 0,
-   "stdout": "3\n",
+   "stdout": "1\n",
    "stderr": ""
   },
   "reference": {
@@ -805,7 +805,7 @@
   "honeypot": {
    "exit": 0,
    "stdout": "",
-   "stderr": "--2026-11-17 22:34:11--  http://192.0.2.10/bins.sh\nConnecting to 192.0.2.10:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 143732 (140K) [application/octet-stream]\nSaving to: 'bins.sh'\n\nbins.sh                      100%[===================\u003e] 140K  --.-KB/s    in 0.1s\n\n2026-1…"
+   "stderr": "--2026-11-17 22:41:31--  http://192.0.2.10/bins.sh\nConnecting to 192.0.2.10:80... connected.\nHTTP request sent, awaiting response... 200 OK\nLength: 143732 (140K) [application/octet-stream]\nSaving to: 'bins.sh'\n\nbins.sh                      100%[===================\u003e] 140K  --.-KB/s    in 0.1s\n\n2026-1…"
   },
   "match": true,
   "giveaway": false
@@ -1493,7 +1493,7 @@
   "command": "stat /etc/hostname",
   "honeypot": {
    "exit": 0,
-   "stdout": "  File: /etc/hostname\n  Size: 10              Blocks: 4          IO Block: 4096   regular file\nAccess: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-09-03 18:34:03.549686215 +0000\nModify: 2025-09-03 18:34:03.549686215 +0000\nChange: 2025-09-03 18:34:03.549686215 +0000\n…",
+   "stdout": "  File: /etc/hostname\n  Size: 10              Blocks: 4          IO Block: 4096   regular file\nAccess: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-09-03 18:41:17.000202142 +0000\nModify: 2025-09-03 18:41:17.000202142 +0000\nChange: 2025-09-03 18:41:17.000202142 +0000\n…",
    "stderr": ""
   },
   "reference": {
@@ -1561,7 +1561,7 @@
   "command": "ls -la /dev/shm /var/tmp",
   "honeypot": {
    "exit": 0,
-   "stdout": "/dev/shm:\ntotal 8\ndrwxr-xr-x 2 root root 4096 Oct 29 17:22 .\ndrwxr-xr-x 2 root root 4096 Sep 19  2025 ..\n\n/var/tmp:\ntotal 8\ndrwxrwxrwt 2 root root 4096 Oct  9  2025 .\ndrwxr-xr-x 2 root root 4096 Aug 17  2025 ..\n",
+   "stdout": "/dev/shm:\ntotal 8\ndrwxr-xr-x 2 root root 4096 Oct 29 17:29 .\ndrwxr-xr-x 2 root root 4096 Sep 19  2025 ..\n\n/var/tmp:\ntotal 8\ndrwxrwxrwt 2 root root 4096 Oct  9  2025 .\ndrwxr-xr-x 2 root root 4096 Aug 17  2025 ..\n",
    "stderr": ""
   },
   "reference": {

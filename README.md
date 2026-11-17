@@ -22,7 +22,7 @@ Ubuntu 22.04 container, and the answers are compared.
 
 | Lines answered like Ubuntu 22.04 | Before | Now |
 |---|---:|---:|
-| [Development set](tools/fidelity/corpus.txt) | 47 / 95 | **95 / 95** |
+| [Development set](tools/fidelity/corpus.txt) | 49 / 95 | **95 / 95** |
 | [Held-out set](tools/fidelity/holdout.txt), first run | | **59 / 65** |
 | Giveaways in the development set | 29 | **0** |
 

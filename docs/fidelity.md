@@ -10,8 +10,8 @@ A giveaway is an answer no stock server gives: `command not found` for a tool Ub
 
 | Group | Lines | Before | Now |
 |---|---:|---:|---:|
-| All lines | 95 | 47 | 95 |
-| recon | 33 | 22 | 33 |
+| All lines | 95 | 49 | 95 |
+| recon | 33 | 24 | 33 |
 | key planting | 3 | 2 | 3 |
 | passwords | 3 | 2 | 3 |
 | busybox probes | 8 | 3 | 8 |
