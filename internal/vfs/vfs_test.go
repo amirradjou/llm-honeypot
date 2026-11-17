@@ -169,6 +169,29 @@ func TestRemoveRenameMkdir(t *testing.T) {
 	}
 }
 
+func TestPlaceholderWithDefault(t *testing.T) {
+	f := newTestFS(t)
+	if err := f.WritePlaceholderDefault("/etc/motd", []byte("hello\n"), "a motd", WriteOptions{Mode: 0o640, UID: 3}); err != nil {
+		t.Fatal(err)
+	}
+	data, info, err := f.ReadFile("/etc/motd")
+	if err != nil || string(data) != "hello\n" || !info.Placeholder || info.Size != 6 || info.Hint != "a motd" || info.UID != 3 {
+		t.Fatalf("default read = %q %+v %v", data, info, err)
+	}
+	// A clone keeps the default; appending keeps it as the prefix.
+	c := f.Clone()
+	if err := c.AppendFile("/etc/motd", []byte("more\n"), WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	data, info, _ = c.ReadFile("/etc/motd")
+	if string(data) != "hello\nmore\n" || info.Placeholder || info.Size != 11 {
+		t.Errorf("appended = %q %+v", data, info)
+	}
+	if data, _, _ := f.ReadFile("/etc/motd"); string(data) != "hello\n" {
+		t.Errorf("template changed: %q", data)
+	}
+}
+
 func TestPlaceholderAndDynamic(t *testing.T) {
 	f := newTestFS(t)
 

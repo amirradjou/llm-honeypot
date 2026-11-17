@@ -213,14 +213,14 @@ func (m *Machine) seedEtc(b *builder) {
 		"  unset i",
 		"fi",
 	), ageInstall)
-	b.placeholder("/etc/bash.bashrc", 2319, "Ubuntu's default system-wide /etc/bash.bashrc", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/services", 12813, "standard /etc/services from the netbase package", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/protocols", 2932, "standard /etc/protocols from the netbase package", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/login.defs", 10734, "Ubuntu default /etc/login.defs", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/adduser.conf", 3028, "Ubuntu default adduser.conf", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/nsswitch.conf", 510, "Ubuntu default nsswitch.conf", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/ld.so.conf", 34, "Debian ld.so.conf: include /etc/ld.so.conf.d/*.conf", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/ld.so.cache", 27412, "binary ld.so cache", 0o644, 0, 0, ageConfig)
+	for _, f := range []string{"/etc/bash.bashrc", "/etc/services", "/etc/protocols", "/etc/login.defs", "/etc/adduser.conf",
+		"/etc/nsswitch.conf", "/etc/ld.so.conf"} {
+		b.ref(f, 0o644, 0, 0, ageInstall)
+	}
+	// ld.so.cache is binary: reading it shows binary, as on a real box.
+	b.bin("/etc/ld.so.cache", reference().sizes["ld.so.cache"])
+	b.fail(b.fs.Chmod("/etc/ld.so.cache", 0o644))
+	b.stamp("/etc/ld.so.cache", ageConfig)
 	b.text("/etc/apt/sources.list", lines(
 		"# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to",
 		"# newer versions of the distribution.",
@@ -236,7 +236,6 @@ func (m *Machine) seedEtc(b *builder) {
 		"deb http://security.ubuntu.com/ubuntu "+p.OSCodename+"-security multiverse",
 	), ageInstall)
 	b.text("/etc/apt/sources.list.d/nodesource.list", "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main\n", ageConfig)
-	b.text("/etc/apt/sources.list.d/pgdg.list", "deb http://apt.postgresql.org/pub/repos/apt "+p.OSCodename+"-pgdg main\n", ageConfig)
 	b.text("/etc/netplan/50-cloud-init.yaml", lines(
 		"# This file is generated from information provided by the datasource.  Changes",
 		"# to it will not persist across an instance reboot.  To disable cloud-init's",
@@ -261,8 +260,8 @@ func (m *Machine) seedEtc(b *builder) {
 		"    version: 2",
 	), ageInstall)
 	b.text("/etc/ssh/sshd_config", sshdConfig, ageConfig)
-	b.placeholder("/etc/ssh/ssh_config", 1650, "OpenSSH client ssh_config with Ubuntu defaults", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/ssh/moduli", 613029, "OpenSSH moduli file", 0o644, 0, 0, ageInstall)
+	b.ref("/etc/ssh/ssh_config", 0o644, 0, 0, ageInstall)
+	b.text("/etc/ssh/moduli", sshModuli(p.Hostname), ageInstall)
 	b.text("/etc/ssh/ssh_host_ed25519_key.pub", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN"+base64ish(p.Hostname+"hostkey", 37)+" root@"+p.Hostname+"\n", ageInstall)
 	b.file("/etc/ssh/ssh_host_ed25519_key", lines(
 		"-----BEGIN OPENSSH PRIVATE KEY-----",
@@ -275,30 +274,32 @@ func (m *Machine) seedEtc(b *builder) {
 		"-----END OPENSSH PRIVATE KEY-----",
 	), 0o600, 0, 0, ageInstall)
 	b.text("/etc/ssh/ssh_host_rsa_key.pub", "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ"+base64ish(p.Hostname+"rsa", 372)+" root@"+p.Hostname+"\n", ageInstall)
-	b.placeholder("/etc/ssh/ssh_host_rsa_key", 2602, "OpenSSH RSA private host key (PEM, unreadable garbage is fine)", 0o600, 0, 0, ageInstall)
-	b.placeholder("/etc/ssh/ssh_host_ecdsa_key", 505, "OpenSSH ECDSA private host key", 0o600, 0, 0, ageInstall)
+	b.file("/etc/ssh/ssh_host_rsa_key", pemBlock("OPENSSH PRIVATE KEY", p.Hostname+"rsakey", 1823), 0o600, 0, 0, ageInstall)
+	b.file("/etc/ssh/ssh_host_ecdsa_key", pemBlock("OPENSSH PRIVATE KEY", p.Hostname+"ecdsakey", 314), 0o600, 0, 0, ageInstall)
 	b.text("/etc/ssh/ssh_host_ecdsa_key.pub", "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBB"+base64ish(p.Hostname+"ecdsa", 111)+"= root@"+p.Hostname+"\n", ageInstall)
 
 	b.text("/etc/nginx/nginx.conf", nginxConf, ageConfig)
 	b.text("/etc/nginx/sites-available/default", nginxDefaultSite, ageInstall)
 	b.text("/etc/nginx/sites-available/bakery", nginxBakerySite, ageConfig)
 	b.link("/etc/nginx/sites-available/bakery", "/etc/nginx/sites-enabled/bakery", ageConfig)
-	b.placeholder("/etc/nginx/mime.types", 5349, "stock nginx mime.types", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/nginx/fastcgi_params", 1077, "stock nginx fastcgi_params", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/nginx/proxy_params", 180, "stock nginx proxy_params", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/nginx/snippets/fastcgi-php.conf", 423, "stock nginx fastcgi-php snippet", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/nginx/snippets/snakeoil.conf", 217, "stock nginx snakeoil snippet", 0o644, 0, 0, ageInstall)
+	for _, f := range []string{"/etc/nginx/mime.types", "/etc/nginx/fastcgi_params", "/etc/nginx/proxy_params",
+		"/etc/nginx/snippets/fastcgi-php.conf", "/etc/nginx/snippets/snakeoil.conf"} {
+		b.ref(f, 0o644, 0, 0, ageInstall)
+	}
 	b.dir("/etc/letsencrypt/live/shop.hazelbakery.example", 0o700, 0, 0, ageConfig)
-	b.placeholder("/etc/letsencrypt/live/shop.hazelbakery.example/README", 692, "certbot live README", 0o644, 0, 0, ageConfig)
+	b.text("/etc/letsencrypt/live/shop.hazelbakery.example/README", certbotReadme, ageConfig)
 	b.link("../../archive/shop.hazelbakery.example/fullchain3.pem", "/etc/letsencrypt/live/shop.hazelbakery.example/fullchain.pem", ageConfig)
 	b.link("../../archive/shop.hazelbakery.example/privkey3.pem", "/etc/letsencrypt/live/shop.hazelbakery.example/privkey.pem", ageConfig)
 	b.dir("/etc/letsencrypt/archive/shop.hazelbakery.example", 0o700, 0, 0, ageConfig)
-	b.placeholder("/etc/letsencrypt/archive/shop.hazelbakery.example/fullchain3.pem", 5616, "PEM certificate chain for shop.hazelbakery.example issued by Let's Encrypt R3", 0o644, 0, 0, ageConfig)
-	b.placeholder("/etc/letsencrypt/archive/shop.hazelbakery.example/privkey3.pem", 241, "PEM EC private key", 0o600, 0, 0, ageConfig)
+	b.text("/etc/letsencrypt/archive/shop.hazelbakery.example/fullchain3.pem",
+		pemBlock("CERTIFICATE", "le-leaf3", 1290)+pemBlock("CERTIFICATE", "le-r3", 1296)+pemBlock("CERTIFICATE", "le-x1", 1380), ageConfig)
+	b.file("/etc/letsencrypt/archive/shop.hazelbakery.example/privkey3.pem", pemBlock("PRIVATE KEY", "le-key3", 138), 0o600, 0, 0, ageConfig)
 
-	b.placeholder("/etc/postgresql/14/main/postgresql.conf", 29734, "PostgreSQL 14 postgresql.conf with listen_addresses = 'localhost', shared_buffers = 512MB, max_connections = 100", 0o644, 110, 116, ageConfig)
+	// the stock file with the one setting the admin tuned
+	b.file("/etc/postgresql/14/main/postgresql.conf", strings.Replace(string(refFile("files/etc/postgresql/14/main/postgresql.conf")),
+		"shared_buffers = 128MB", "shared_buffers = 512MB", 1), 0o644, 110, 116, ageConfig)
 	b.file("/etc/postgresql/14/main/pg_hba.conf", pgHba, 0o640, 110, 116, ageConfig)
-	b.placeholder("/etc/postgresql/14/main/pg_ident.conf", 1636, "stock pg_ident.conf", 0o640, 110, 116, ageInstall)
+	b.ref("/etc/postgresql/14/main/pg_ident.conf", 0o640, 110, 116, ageInstall)
 	b.file("/etc/postgresql/14/main/postgresql.auto.conf", "# Do not edit this file manually!\n# It will be overwritten by the ALTER SYSTEM command.\n", 0o600, 110, 116, ageInstall)
 
 	b.text("/etc/fail2ban/jail.local", lines(
@@ -354,9 +355,9 @@ func (m *Machine) seedEtc(b *builder) {
 	b.text("/etc/skel/.profile", profileRc, ageInstall)
 	b.text("/etc/skel/.bash_logout", bashLogout, ageInstall)
 	b.text("/etc/vim/vimrc", lines("\" All system-wide defaults are set in $VIMRUNTIME/debian.vim and sourced by", "\" the call to :runtime you can find below.  If you wish to change any of those", "\" settings, you should do it in this file (/etc/vim/vimrc), since debian.vim", "\" will be overwritten everytime an upgrade of the vim packages is performed.", "", "runtime! debian.vim", "", "\" Vim will load $VIMRUNTIME/defaults.vim if the user does not have a vimrc.", "if filereadable(\"/etc/vim/vimrc.local\")", "  source /etc/vim/vimrc.local", "endif"), ageInstall)
-	b.placeholder("/etc/pam.d/sshd", 2133, "Ubuntu /etc/pam.d/sshd", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/pam.d/common-auth", 1332, "Ubuntu /etc/pam.d/common-auth", 0o644, 0, 0, ageInstall)
-	b.placeholder("/etc/pam.d/common-password", 1642, "Ubuntu /etc/pam.d/common-password", 0o644, 0, 0, ageInstall)
+	for _, f := range []string{"/etc/pam.d/sshd", "/etc/pam.d/common-auth", "/etc/pam.d/common-password"} {
+		b.ref(f, 0o644, 0, 0, ageInstall)
+	}
 	b.text("/etc/rsyslog.d/50-default.conf", lines("#  Default rules for rsyslog.", "#", "#\t\t\tFor more information see rsyslog.conf(5) and /etc/rsyslog.conf", "", "#", "# First some standard log files.  Log by facility.", "#", "auth,authpriv.*\t\t\t/var/log/auth.log", "*.*;auth,authpriv.none\t\t-/var/log/syslog", "#cron.*\t\t\t\t/var/log/cron.log", "#daemon.*\t\t\t-/var/log/daemon.log", "kern.*\t\t\t\t-/var/log/kern.log", "#lpr.*\t\t\t\t-/var/log/lpr.log", "mail.*\t\t\t\t-/var/log/mail.log", "#user.*\t\t\t\t-/var/log/user.log"), ageInstall)
 	b.text("/etc/update-motd.d/00-header", lines("#!/bin/sh", "#", "#    00-header - create the header of the MOTD", "#    Copyright (C) 2009-2010 Canonical Ltd.", "", "[ -r /etc/lsb-release ] && . /etc/lsb-release", "", `if [ -z "$DISTRIB_DESCRIPTION" ] && [ -x /usr/bin/lsb_release ]; then`, "\t# Fall back to using the very slow lsb_release utility", "\tDISTRIB_DESCRIPTION=$(lsb_release -s -d)", "fi", "", `printf "Welcome to %s (%s %s %s)\n" "$DISTRIB_DESCRIPTION" "$(uname -o)" "$(uname -r)" "$(uname -m)"`), ageInstall)
 }

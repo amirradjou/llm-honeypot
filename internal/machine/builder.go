@@ -62,12 +62,20 @@ func (b *builder) link(target, p string, a age) {
 	b.stamp(p, a)
 }
 
-// placeholder registers a file whose content a model will write later.
-func (b *builder) placeholder(p string, size int64, hint string, mode fs.FileMode, uid, gid int, a age) {
+// ref writes a stock file recorded byte for byte from the reference box
+// (refdata/files).
+func (b *builder) ref(p string, mode fs.FileMode, uid, gid int, a age) {
+	b.file(p, string(refFile("files"+p)), mode, uid, gid, a)
+}
+
+// fill registers a placeholder with built-in content: when a model is
+// configured it may write the file on first read, and otherwise content is
+// what every command sees. Either way ls, wc and cat agree.
+func (b *builder) fill(p, content, hint string, mode fs.FileMode, uid, gid int, a age) {
 	if b.err != nil {
 		return
 	}
-	b.failp(p, b.fs.WritePlaceholder(p, size, hint, vfs.WriteOptions{Mode: mode, UID: uid, GID: gid}))
+	b.failp(p, b.fs.WritePlaceholderDefault(p, []byte(content), hint, vfs.WriteOptions{Mode: mode, UID: uid, GID: gid}))
 	b.stamp(p, a)
 }
 

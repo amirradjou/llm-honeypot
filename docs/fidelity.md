@@ -4,14 +4,14 @@ Bot-style command lines from [`tools/fidelity/corpus.txt`](../tools/fidelity/cor
 
 Model backend off (the default). Before = the code before the fidelity work (commit dc80abf).
 
-**90 of 90 lines behave like Ubuntu 22.04 (100%). Giveaways: 0.**
+**95 of 95 lines behave like Ubuntu 22.04 (100%). Giveaways: 0.**
 
 A giveaway is an answer no stock server gives: `command not found` for a tool Ubuntu ships, a syntax error on valid bash, binary garbage on the terminal.
 
 | Group | Lines | Before | Now |
 |---|---:|---:|---:|
-| All lines | 90 | 47 | 90 |
-| recon | 28 | 22 | 28 |
+| All lines | 95 | 49 | 95 |
+| recon | 33 | 24 | 33 |
 | key planting | 3 | 2 | 3 |
 | passwords | 3 | 2 | 3 |
 | busybox probes | 8 | 3 | 8 |

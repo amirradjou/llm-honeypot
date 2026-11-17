@@ -172,7 +172,9 @@ What it does to keep that bounded:
 
 With `-llm off` (the default) the honeypot is entirely deterministic Go code.
 Turning a backend on only affects two things: commands with no Go implementation,
-and files that were seeded as placeholders.
+and the few files seeded as placeholders (the shop's source, `.viminfo` and the
+like). Those have built-in content too, so with the model off they read the
+same way `ls -l` sizes them; with it on, the model may rewrite them on first read.
 
 ```sh
 # Claude (needs ANTHROPIC_API_KEY, or `ant auth login`)
@@ -216,6 +218,22 @@ A **machine profile** describes the box the honeypot pretends to be (hostname,
 OS, kernel, hardware, network, users, processes, packages). The built-in default
 is a small Ubuntu 22.04 VPS. A JSON profile only needs to list the fields it
 changes; everything else keeps the default.
+
+What the default box has installed is recorded, not invented:
+[`scripts/record-refdata.sh`](../scripts/record-refdata.sh) builds a 22.04 cloud
+server with the profile's packages ([`tools/refdata/Dockerfile`](../tools/refdata/Dockerfile))
+and copies out its package database (`dpkg -l`, `dpkg -s`, `apt list --installed`
+and `/var/lib/dpkg/status` all read it), its `/usr/bin` and `/usr/sbin` (names,
+sizes, modes, symlinks), its kernel files and stock configs such as
+`/etc/services` and `ssh_config`, into `internal/machine/refdata`. Re-run it
+after changing the package list; never edit the recorded files by hand.
+
+The logs (`auth.log`, `syslog`, `kern.log`, nginx, PostgreSQL, the shop's own
+log, `dpkg.log`) are generated from the profile up to the box's clock and
+refreshed for each new session. Every event is a function of its time slot, so
+two sessions agree, and the admins' logins in `auth.log` are the ones `last`
+shows. Client addresses come from the documentation ranges (RFC 5737); nothing
+about the host the honeypot runs on appears in them.
 
 ## The fidelity check
 
@@ -295,7 +313,8 @@ attacker ──ssh──► internal/sshd      accept-all auth, session channels
 ```
 
 - **`internal/vfs`** — an in-memory filesystem with Unix permissions, symlinks,
-  device nodes, placeholder files (content generated on first read) and opaque
+  device nodes, placeholder files (built-in content a model may replace on
+  first read) and opaque
   files (binaries/payloads that report a size but are never stored). Each session
   runs on an independent `Clone()`.
 - **`internal/profile` + `internal/machine`** — turn a profile into a fully

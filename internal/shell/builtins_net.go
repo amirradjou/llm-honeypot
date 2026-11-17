@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"path"
 	"strings"
@@ -10,8 +11,8 @@ import (
 func (in *Interp) registerNet() {
 	in.Register("wget", cmdWget)
 	in.Register("curl", cmdCurl)
-	in.Register("tftp", cmdTftp)
-	in.Register("ftpget", cmdFtpget)
+	in.Register("tftp", busyboxOnly(cmdTftp))
+	in.Register("ftpget", busyboxOnly(cmdFtpget))
 	in.Register("ifconfig", cmdIfconfig)
 	in.Register("ip", cmdIP)
 	in.Register("netstat", cmdNetstat)
@@ -27,7 +28,7 @@ func (in *Interp) registerNet() {
 // ./x) behave as if the download succeeded — without ever fetching it.
 func (c *Context) recordDownload(tool, url, method, saveAs string) {
 	d := Download{Tool: tool, URL: url, Method: method}
-	if saveAs != "" {
+	if saveAs != "" && !c.notInstalled {
 		abs := c.Sess.abs(saveAs)
 		// Payloads are small opaque blobs; size is stable per URL.
 		size := int64(24_000 + seedInode(url)%180_000)
@@ -230,6 +231,21 @@ func portFor(url string) string {
 		return "21"
 	}
 	return "80"
+}
+
+// busyboxOnly wraps a tool this box has only as a busybox applet. Run by
+// name it is "command not found", as on the real box, but what it was
+// asked to fetch is still recorded.
+func busyboxOnly(cmd Command) Command {
+	return func(c *Context) int {
+		if c.applet || c.sh == nil || c.sh.lookPath(c.Args[0]) != "" {
+			return cmd(c)
+		}
+		quiet := *c
+		quiet.Stdout, quiet.Stderr, quiet.notInstalled = io.Discard, io.Discard, true
+		cmd(&quiet)
+		return c.sh.notFound(c)
+	}
 }
 
 func cmdTftp(c *Context) int {

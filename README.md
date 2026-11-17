@@ -22,14 +22,14 @@ Ubuntu 22.04 container, and the answers are compared.
 
 | Lines answered like Ubuntu 22.04 | Before | Now |
 |---|---:|---:|
-| [Development set](tools/fidelity/corpus.txt) | 47 / 90 | **90 / 90** |
+| [Development set](tools/fidelity/corpus.txt) | 49 / 95 | **95 / 95** |
 | [Held-out set](tools/fidelity/holdout.txt), first run | | **59 / 65** |
 | Giveaways in the development set | 29 | **0** |
 
 A giveaway is an answer no stock server gives: `command not found` for a tool
 Ubuntu ships, a syntax error on valid bash, binary garbage on the screen.
 
-The development set drove the fixes, so its 90 of 90 mostly shows what was
+The development set drove the fixes, so its 95 of 95 mostly shows what was
 fixed. The held-out set is the fairer number: 65 new lines, scored on their
 first run. The gaps it found (five missing or incomplete commands) are fixed
 since, and its one remaining difference is a test that depended on the box's

@@ -84,7 +84,8 @@ func hasFlag(flags []string, letters string) bool {
 }
 
 // readTarget reads a file for a command, handling placeholders (which the
-// model fallback fills later) and returning a bash-style error string.
+// model fills when one is configured; otherwise their built-in default is
+// read) and returning a bash-style error string.
 func (c *Context) readTarget(arg string) ([]byte, error) {
 	abs := c.Sess.abs(arg)
 	info, err := c.FS().Stat(abs)
@@ -107,8 +108,8 @@ func (c *Context) readTarget(arg string) ([]byte, error) {
 				return filled, nil
 			}
 		}
-		return nil, nil
 	}
+	// Without a generator a placeholder reads as its built-in default.
 	return data, nil
 }
 
@@ -433,6 +434,10 @@ func cmdChmod(c *Context) int {
 			c.Errorf("invalid mode: '%s'", modeStr)
 			return 1
 		}
+		if _, err := strconv.ParseUint(modeStr, 8, 32); err != nil {
+			// a symbolic mode keeps the setuid, setgid and sticky bits
+			mode |= info.Mode & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
+		}
 		if err := c.FS().Chmod(abs, mode); err != nil {
 			c.Errorf("changing permissions of '%s': %s", t, vfs.Strerror(err))
 			status = 1
@@ -711,7 +716,7 @@ func cmdGrep(c *Context) int {
 			if recursive {
 				var paths []string
 				_ = c.FS().Walk(abs, func(p string, info vfs.Info) error {
-					if !info.IsDir() && !info.Placeholder {
+					if !info.IsDir() {
 						paths = append(paths, p)
 					}
 					return nil

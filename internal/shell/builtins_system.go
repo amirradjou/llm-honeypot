@@ -3,11 +3,12 @@ package shell
 import (
 	"fmt"
 	"io"
-	"sort"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/amirradjou/llm-honeypot/internal/machine"
 	"github.com/amirradjou/llm-honeypot/internal/profile"
 	"github.com/amirradjou/llm-honeypot/internal/vfs"
 )
@@ -288,17 +289,33 @@ func cmdUsers(c *Context) int {
 	return 0
 }
 
+// cmdLast reads the same login history auth.log was written from: this
+// session, the admins' logins since wtmp last rotated, and the boot.
 func cmdLast(c *Context) int {
-	p := c.Sess.Machine.Profile
-	now := c.Sess.Machine.Now()
-	ip := clientIP(c)
-	c.Printf("%-8s %-12s %-16s %s   still logged in\n", c.Sess.User, "pts/0", ip, now.Add(-14*time.Minute).Format("Mon Jan  2 15:04"))
-	c.Printf("%-8s %-12s %-16s %s - %s  (%s)\n", "martin", "pts/0", "10.20.30.15",
-		now.Add(-52*time.Hour).Format("Mon Jan  2 15:04"), now.Add(-50*time.Hour).Format("15:04"), "2:03")
-	c.Printf("%-8s %-12s %-16s %s - %s  (00:41)\n", "deploy", "pts/1", "10.20.30.9",
-		now.Add(-74*time.Hour).Format("Mon Jan  2 15:04"), now.Add(-74*time.Hour+41*time.Minute).Format("15:04"))
-	c.Printf("reboot   system boot  %-16s %s\n", p.Kernel, c.Sess.Machine.BootTime.Format("Mon Jan  2 15:04"))
-	c.Print("\nwtmp begins " + c.Sess.Machine.BootTime.Add(-720*time.Hour).Format("Mon Jan  2 15:04:05 2006") + "\n")
+	m := c.Sess.Machine
+	now := m.Now()
+	row := func(user, tty, host string, from time.Time, rest string) {
+		if len(host) > 16 {
+			host = host[:16]
+		}
+		c.Printf("%-8s %-12s %-16s %s %s\n", user, tty, host, from.Format("Mon Jan _2 15:04"), rest)
+	}
+	row(c.Sess.User, "pts/0", clientIP(c), now.Add(-14*time.Minute), "  still logged in")
+	begins := m.WtmpBegins(now)
+	logins := m.Logins(begins, now)
+	for i := len(logins) - 1; i >= 0; i-- {
+		l := logins[i]
+		d := l.End.Sub(l.Start).Round(time.Minute)
+		dur := fmt.Sprintf("(%02d:%02d)", int(d.Hours())%24, int(d.Minutes())%60)
+		if d >= 24*time.Hour {
+			dur = fmt.Sprintf("(%d+%s", int(d.Hours())/24, dur[1:])
+		}
+		row(l.User, l.TTY, l.From, l.Start, "- "+l.End.Format("15:04")+"  "+dur)
+	}
+	if !m.BootTime.Before(begins) {
+		row("reboot", "system boot", m.Profile.Kernel, m.BootTime, "  still running")
+	}
+	c.Print("\nwtmp begins " + begins.Format("Mon Jan _2 15:04:05 2006") + "\n")
 	return 0
 }
 
@@ -313,7 +330,7 @@ func cmdPs(c *Context) int {
 	if strings.Contains(strings.Join(c.Args[1:], ""), "ef") {
 		c.Printf("%-8s %5s %5s %2s %5s %-8s %-8s %s\n", "UID", "PID", "PPID", "C", "STIME", "TTY", "TIME", "CMD")
 		for _, pr := range p.Processes {
-			c.Printf("%-8s %5d %5d %2d %5s %-8s %-8s %s\n", pr.User, pr.PID, ppidFor(pr.PID), 0, "Aug11", ttyOrQ(pr.TTY), pr.Time, pr.Command)
+			c.Printf("%-8s %5d %5d %2d %5s %-8s %-8s %s\n", pr.User, pr.PID, ppidFor(pr.PID), 0, bootDay(c), ttyOrQ(pr.TTY), pr.Time, pr.Command)
 		}
 		c.printShellProcess(true)
 		return 0
@@ -328,8 +345,12 @@ func cmdPs(c *Context) int {
 		return 0
 	}
 	for _, pr := range list {
+		start := pr.Start
+		if start == "" {
+			start = bootDay(c) // the daemons started when the box booted
+		}
 		c.Printf("%-8s %5d %4.1f %4.1f %7d %6d %-6s %-4s %5s %6s %s\n",
-			pr.User, pr.PID, pr.CPU, pr.Mem, pr.VSZ, pr.RSS, ttyOrQ(pr.TTY), pr.Stat, pr.Start, pr.Time, pr.Command)
+			pr.User, pr.PID, pr.CPU, pr.Mem, pr.VSZ, pr.RSS, ttyOrQ(pr.TTY), pr.Stat, start, pr.Time, pr.Command)
 	}
 	c.printShellProcess(false)
 	return 0
@@ -346,6 +367,9 @@ func (c *Context) printShellProcess(ef bool) {
 	c.Printf("%-8s %5d %4.1f %4.1f %7d %6d %-6s %-4s %5s %6s %s\n", c.Sess.User, pid, 0.0, 0.1, 9184, 5040, "pts/0", "Ss", when, "0:00", "-bash")
 	c.Printf("%-8s %5d %4.1f %4.1f %7d %6d %-6s %-4s %5s %6s %s\n", c.Sess.User, pid+40, 0.0, 0.0, 8892, 3360, "pts/0", "R+", c.Sess.Machine.Now().Format("15:04"), "0:00", "ps aux")
 }
+
+// bootDay is ps's START for a process started at boot, e.g. "Oct29".
+func bootDay(c *Context) string { return c.Sess.Machine.BootTime.Format("Jan02") }
 
 func ttyOrQ(t string) string {
 	if t == "" {
@@ -848,29 +872,134 @@ func cmdMount(c *Context) int {
 	return 0
 }
 
+// cmdDpkg answers the read-only dpkg and dpkg-query questions bots ask
+// (-l, -s, -W) from the recorded package list.
 func cmdDpkg(c *Context) int {
-	p := c.Sess.Machine.Profile
+	m := c.Sess.Machine
+	var mode string
+	var pats []string
 	for _, a := range c.Args[1:] {
-		if a == "-l" || a == "--list" {
-			c.Print("Desired=Unknown/Install/Remove/Purge/Hold\n")
-			c.Print("| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n")
-			c.Print("|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n")
-			c.Printf("||/ %-30s %-24s %-12s %s\n", "Name", "Version", "Architecture", "Description")
-			c.Print("+++-==============================-========================-============-=================================\n")
-			pkgs := append([]string(nil), p.Packages...)
-			sort.Strings(pkgs)
-			for _, pk := range pkgs {
-				c.Printf("ii  %-30s %-24s %-12s %s\n", pk, fakeVersion(pk), "amd64", pk+" package")
+		switch a {
+		case "-l", "--list", "-s", "--status", "-W", "--show":
+			mode = a
+		default:
+			if !strings.HasPrefix(a, "-") {
+				pats = append(pats, a)
+			}
+		}
+	}
+	// matching returns the packages each pattern names, complaining about
+	// the patterns that name none.
+	matching := func() ([]machine.Package, int) {
+		var rows []machine.Package
+		status := 0
+		for _, pat := range pats {
+			found := false
+			for _, p := range m.Packages() {
+				if ok, _ := path.Match(pat, p.Name); ok {
+					rows = append(rows, p)
+					found = true
+				}
+			}
+			if !found {
+				fmt.Fprintf(c.Stderr, "dpkg-query: no packages found matching %s\n", pat)
+				status = 1
+			}
+		}
+		return rows, status
+	}
+	switch mode {
+	case "-l", "--list":
+		if len(pats) == 0 {
+			c.Print(m.DpkgHeader())
+			for _, p := range m.Packages() {
+				c.Print(p.Line + "\n")
 			}
 			return 0
 		}
+		rows, status := matching()
+		if len(rows) > 0 {
+			c.Print(dpkgTable(m.DpkgHeader(), rows))
+		}
+		return status
+	case "-s", "--status":
+		if len(pats) == 0 {
+			fmt.Fprint(c.Stderr, "dpkg-query: error: --status needs at least one package name argument\n\nUse --help for help about querying packages.\n")
+			return 2
+		}
+		status, first := 0, true
+		for _, name := range pats {
+			st := m.PackageStatus(name)
+			if st == "" {
+				fmt.Fprintf(c.Stderr, "dpkg-query: package '%s' is not installed and no information is available\n", name)
+				status = 1
+				continue
+			}
+			if !first {
+				c.Print("\n")
+			}
+			first = false
+			c.Print(st)
+		}
+		if status != 0 {
+			fmt.Fprint(c.Stderr, "Use dpkg --info (= dpkg-deb --info) to examine archive files.\n")
+		}
+		return status
+	case "-W", "--show":
+		rows, status := m.Packages(), 0
+		if len(pats) > 0 {
+			rows, status = matching()
+		}
+		for _, p := range rows {
+			c.Printf("%s\t%s\n", dpkgFullName(p), p.Version)
+		}
+		return status
 	}
 	return 0
 }
 
-func fakeVersion(pkg string) string {
-	h := seedInode(pkg)
-	return fmt.Sprintf("%d.%d.%d-%dubuntu%d", h%4+1, h%10, h%20, h%5, h%3+1)
+// dpkgFullName is the package name as dpkg -l prints it (libc6:amd64).
+func dpkgFullName(p machine.Package) string {
+	return strings.Fields(strings.TrimPrefix(p.Line, "ii  "))[0]
+}
+
+// dpkgTable lays rows out the way dpkg-query -l does when stdout is not a
+// terminal: each column as wide as its longest entry, with dpkg's minimums.
+func dpkgTable(header string, rows []machine.Package) string {
+	hdr := strings.Split(header, "\n")
+	// the recorded "+++-===-===-===-===" line gives the full list's columns
+	cols := strings.Split(hdr[4], "-")
+	off := []int{4}
+	for _, cl := range cols[1 : len(cols)-1] {
+		off = append(off, off[len(off)-1]+len(cl)+1)
+	}
+	type row struct{ name, ver, arch, desc string }
+	var rs []row
+	wn, wv, wa, wd := 14, 12, 12, 0
+	for _, p := range rows {
+		l := p.Line
+		cut := func(i int) string {
+			if off[i] >= len(l) {
+				return ""
+			}
+			end := len(l)
+			if i+1 < len(off) {
+				end = min(len(l), off[i+1])
+			}
+			return strings.TrimRight(l[off[i]:end], " ")
+		}
+		r := row{cut(0), cut(1), cut(2), cut(3)}
+		wn, wv, wa, wd = max(wn, len(r.name)), max(wv, len(r.ver)), max(wa, len(r.arch)), max(wd, len(r.desc))
+		rs = append(rs, r)
+	}
+	var b strings.Builder
+	b.WriteString(strings.Join(hdr[:3], "\n") + "\n")
+	fmt.Fprintf(&b, "||/ %-*s %-*s %-*s %s\n", wn, "Name", wv, "Version", wa, "Architecture", "Description")
+	fmt.Fprintf(&b, "+++-%s-%s-%s-%s\n", strings.Repeat("=", wn), strings.Repeat("=", wv), strings.Repeat("=", wa), strings.Repeat("=", wd))
+	for _, r := range rs {
+		fmt.Fprintf(&b, "ii  %-*s %-*s %-*s %s\n", wn, r.name, wv, r.ver, wa, r.arch, r.desc)
+	}
+	return b.String()
 }
 
 func cmdApt(c *Context) int {
@@ -879,7 +1008,48 @@ func cmdApt(c *Context) int {
 		return 0
 	}
 	switch c.Args[1] {
+	case "list":
+		if c.Args[0] != "apt" {
+			break
+		}
+		if c.Stdout != c.Sess.Terminal {
+			fmt.Fprint(c.Stderr, "\nWARNING: apt does not have a stable CLI interface. Use with caution in scripts.\n\n")
+		}
+		var pats []string
+		installed := false
+		for _, a := range c.Args[2:] {
+			if a == "--installed" || a == "-i" {
+				installed = true
+			} else if !strings.HasPrefix(a, "-") {
+				pats = append(pats, a)
+			}
+		}
+		if c.Stdout == c.Sess.Terminal {
+			c.Print("Listing... Done\n")
+		} else {
+			c.Print("Listing...\n")
+		}
+		if !installed {
+			return 0 // the whole archive index is not worth faking
+		}
+		for _, line := range strings.SplitAfter(string(c.Sess.Machine.AptListInstalled()), "\n") {
+			name, _, ok := strings.Cut(line, "/")
+			if !ok {
+				continue
+			}
+			keep := len(pats) == 0
+			for _, pat := range pats {
+				if hit, _ := path.Match(pat, name); hit {
+					keep = true
+				}
+			}
+			if keep {
+				c.Print(line)
+			}
+		}
+		return 0
 	case "update":
+
 		c.Print("Hit:1 http://archive.ubuntu.com/ubuntu jammy InRelease\n")
 		c.Print("Hit:2 http://security.ubuntu.com/ubuntu jammy-security InRelease\n")
 		c.Print("Hit:3 http://archive.ubuntu.com/ubuntu jammy-updates InRelease\n")
@@ -1143,6 +1313,7 @@ func cmdBusybox(c *Context) int {
 		sub := append([]string{applet}, c.Args[2:]...)
 		nctx := *c
 		nctx.Args = sub
+		nctx.applet = true
 		return c.Interp.cmds[applet](&nctx)
 	}
 	fmt.Fprintf(c.Stderr, "%s: applet not found\n", applet)

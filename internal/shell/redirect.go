@@ -338,7 +338,6 @@ func (sh *shell) openRead(t *fdTable, target string, rw bool) (io.Reader, error)
 		return nil, &redirError{msg: target + ": " + vfs.Strerror(err)}
 	}
 	if dinfo.Placeholder {
-		data = nil
 		if gen := sh.in.FileContent; gen != nil {
 			ctx := &Context{Sess: s, Interp: sh.in, Args: []string{"bash"}, Stdin: t.in(), Stdout: t.out(1), Stderr: t.out(2), sh: sh, fds: t}
 			if filled, ok := gen(ctx, abs, dinfo); ok {

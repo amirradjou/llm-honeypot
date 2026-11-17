@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 490" width="820" height="490" role="img" aria-labelledby="t d">
 <title id="t">Bot command lines that behave like a real Ubuntu 22.04 server</title>
-<desc id="d">47 of 90 lines matched before this work and 90 of 90 after.</desc>
+<desc id="d">49 of 95 lines matched before this work and 95 of 95 after.</desc>
 <style>
   .s{fill:#fcfcfb}.ink{fill:#0b0b0b}.ink2{fill:#52514e}.mute{fill:#898781}
   .grid{stroke:#e1e0d9;stroke-width:1}.base{stroke:#c3c2b7;stroke-width:1}
@@ -14,7 +14,7 @@
 </style>
 <rect class="s" x="0" y="0" width="820" height="490" rx="12"/>
 <text class="ink" x="24" y="36" font-size="17" font-weight="600">Can a bot tell it is not a real server?</text>
-<text class="ink2" x="24" y="58" font-size="13">Share of 90 bot-style command lines that get the same answer as on a real Ubuntu 22.04 box.</text>
+<text class="ink2" x="24" y="58" font-size="13">Share of 95 bot-style command lines that get the same answer as on a real Ubuntu 22.04 box.</text>
 <circle class="b" cx="30" cy="80" r="5.5"/><text class="ink2" x="42" y="84.5" font-size="13">before</text>
 <circle class="a" cx="102" cy="80" r="6.5"/><text class="ink2" x="114" y="84.5" font-size="13">now</text>
 <line class="base" x1="196.0" y1="90" x2="196.0" y2="436"/>
@@ -28,16 +28,16 @@
 <line class="grid" x1="636.0" y1="90" x2="636.0" y2="436"/>
 <text class="mute" x="636.0" y="454" font-size="12" text-anchor="middle">100%</text>
 <text class="ink" x="178" y="114" font-size="13.5" font-weight="600" text-anchor="end">All lines</text>
-<line class="link" x1="425.8" y1="110" x2="636.0" y2="110"/>
-<circle class="b" cx="425.8" cy="110" r="5.5"/>
+<line class="link" x1="422.9" y1="110" x2="636.0" y2="110"/>
+<circle class="b" cx="422.9" cy="110" r="5.5"/>
 <circle class="a" cx="636.0" cy="110" r="6.5"/>
-<text class="ink2" x="664" y="114" font-size="13" font-weight="600">47 → 90 of 90</text>
+<text class="ink2" x="664" y="114" font-size="13" font-weight="600">49 → 95 of 95</text>
 <line class="grid" x1="24" y1="128" x2="796" y2="128"/>
 <text class="ink" x="178" y="148" font-size="13.5" font-weight="400" text-anchor="end">recon</text>
-<line class="link" x1="541.7" y1="144" x2="636.0" y2="144"/>
-<circle class="b" cx="541.7" cy="144" r="5.5"/>
+<line class="link" x1="516.0" y1="144" x2="636.0" y2="144"/>
+<circle class="b" cx="516.0" cy="144" r="5.5"/>
 <circle class="a" cx="636.0" cy="144" r="6.5"/>
-<text class="ink2" x="664" y="148" font-size="13" font-weight="400">22 → 28 of 28</text>
+<text class="ink2" x="664" y="148" font-size="13" font-weight="400">24 → 33 of 33</text>
 <text class="ink" x="178" y="182" font-size="13.5" font-weight="400" text-anchor="end">key planting</text>
 <line class="link" x1="489.3" y1="178" x2="636.0" y2="178"/>
 <circle class="b" cx="489.3" cy="178" r="5.5"/>
