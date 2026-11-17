@@ -268,7 +268,8 @@ func (f *FS) ReadDir(p string) ([]Info, error) {
 }
 
 // ReadFile returns a file's content. Placeholders return their Info with
-// Placeholder set and nil content; the caller decides how to fill them.
+// Placeholder set and their built-in default content (nil when they have
+// none); the caller decides whether to ask a generator instead.
 func (f *FS) ReadFile(p string) ([]byte, Info, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -282,7 +283,7 @@ func (f *FS) ReadFile(p string) ([]byte, Info, error) {
 	if n.dynamic != nil {
 		return n.dynamic(), n.info(), nil
 	}
-	if n.placeholder {
+	if n.placeholder && n.content == nil {
 		return nil, n.info(), nil
 	}
 	return append([]byte(nil), n.content...), n.info(), nil
@@ -326,12 +327,14 @@ func (f *FS) AppendFile(p string, data []byte, opts WriteOptions) error {
 	if n.mode&fs.ModeDevice != 0 {
 		return nil
 	}
-	if n.placeholder || n.dynamic != nil {
+	if n.dynamic != nil || n.placeholder && n.content == nil {
 		// Appending to something we never authored: the best we can do
 		// is start from empty rather than invent the prefix here.
-		n.placeholder, n.dynamic, n.content = false, nil, nil
+		n.dynamic, n.content = nil, nil
 	}
-	n.content = append(n.content, data...)
+	n.placeholder = false // a default, if any, is kept as the prefix
+	// a full slice expression: content may be shared with a clone
+	n.content = append(n.content[:len(n.content):len(n.content)], data...)
 	n.size = int64(len(n.content))
 	n.modTime = f.Now()
 	return nil
@@ -350,6 +353,25 @@ func (f *FS) WritePlaceholder(p string, size int64, hint string, opts WriteOptio
 	n.hint = hint
 	n.size = size
 	n.content = nil
+	return nil
+}
+
+// WritePlaceholderDefault registers a placeholder that already has built-in
+// content: a generator may replace it on first read, and without one the
+// default is what every reader sees. The size is the default's, so ls, wc
+// and cat agree whether or not a model is configured.
+func (f *FS) WritePlaceholderDefault(p string, content []byte, hint string, opts WriteOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n, err := f.create(p, opts)
+	if err != nil {
+		return err
+	}
+	n.placeholder = true
+	n.hint = hint
+	n.content = append([]byte{}, content...)
+	n.size = int64(len(content))
+	n.dynamic = nil
 	return nil
 }
 
@@ -554,7 +576,7 @@ func (f *FS) Chmod(p string, mode fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	n.mode = (n.mode & fs.ModeType) | (mode & fs.ModePerm)
+	n.mode = (n.mode & fs.ModeType) | (mode & (fs.ModePerm | fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky))
 	return nil
 }
 
@@ -599,7 +621,9 @@ func (f *FS) Clone() *FS {
 func cloneNode(n *node, parent *node) *node {
 	c := *n
 	c.parent = parent
-	c.content = append([]byte(nil), n.content...)
+	// Content is shared, not copied: nothing writes into a node's content
+	// in place (WriteFile replaces it, AppendFile reallocates), so a clone
+	// costs only the tree, however large the seeded files are.
 	if n.children != nil {
 		c.children = make(map[string]*node, len(n.children))
 		for name, child := range n.children {
