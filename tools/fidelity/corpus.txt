@@ -41,6 +41,11 @@ same	ip a | grep inet
 same	ulimit -n
 same	cat /etc/passwd | grep -v nologin | wc -l
 same	dpkg -l | wc -l
+exact	dpkg -l | grep -c '^ii  openssh-server '
+same	wc -c /var/log/auth.log
+same	grep -c sshd /var/log/auth.log
+same	tail -n 3 /var/log/auth.log | grep -c sshd
+exact	grep -w 22/tcp /etc/services
 
 ## key planting
 same	cd ~ && rm -rf .ssh && mkdir .ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfakekeyfakekeyfakekey mdrfckr">>.ssh/authorized_keys && chmod -R go= ~/.ssh && cd ~
